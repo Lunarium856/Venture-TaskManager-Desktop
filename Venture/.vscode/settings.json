@@ -1,0 +1,8 @@
+{
+    "python.analysis.extraPaths": [
+        "./client/core",
+        "./client/ui",
+        "./client/widgets",
+        "./client/data"
+    ]
+}

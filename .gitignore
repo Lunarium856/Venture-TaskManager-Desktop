@@ -1,0 +1,7 @@
+*.pyc
+*.pyc
+__pycache__/
+
+client/data/*
+!client/data/.gitkeep
+.vscode/settings.json

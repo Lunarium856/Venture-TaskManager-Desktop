@@ -1,0 +1,11 @@
+{
+    "theme": "Venture",
+    "window": {
+        "width": 1200,
+        "height": 800,
+        "maximized": true
+    },
+    "preferences": {
+        "auto_sync": true
+    }
+}

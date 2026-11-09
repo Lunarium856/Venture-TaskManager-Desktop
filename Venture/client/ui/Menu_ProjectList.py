@@ -1,93 +1,22 @@
 import SettingsHandler, Themes, AnimationHandler, DummyList
 from ProjectClasses import Project, Task, Subtask, Tag
-from CustomWidgets import HoverButton
+from CustomWidgets import HoverButton, RoundedScrollBar
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 import sys, json, os, time, datetime, re, sqlite3
 
-class RoundedScrollBar(QScrollBar):
-    """Custom painted scrollbar pulling colors dynamically from the active theme."""
-    def __init__(self, orientation=Qt.Orientation.Vertical, parent=None, controller=None):
-        super().__init__(orientation, parent)
-        self.controller = controller
-        theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
-        
-        self.handle_color = QColor(f"{theme.scroll_handle}")
-        self.setMouseTracking(True)
-        
-        # Smooth color fading animation for hover state
-        self.color_anim = QVariantAnimation(self)
-        self.color_anim.setDuration(200)
-        self.color_anim.valueChanged.connect(self._on_color_anim_value)
-
-    def _on_color_anim_value(self, color):
-        self.handle_color = color
-        self.update()
-
-    def enterEvent(self, event):
-        self.is_hovered = True
-        theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
-        self.color_anim.stop()
-        self.color_anim.setStartValue(self.handle_color)
-        self.color_anim.setEndValue(QColor(f"{theme.scroll_handle_hover}"))
-        self.color_anim.start()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.is_hovered = False
-        theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
-        self.color_anim.stop()
-        self.color_anim.setStartValue(self.handle_color)
-        self.color_anim.setEndValue(QColor(f"{theme.scroll_handle}"))
-        self.color_anim.start()
-        super().leaveEvent(event)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        opt = QStyleOptionSlider()
-        self.initStyleOption(opt)
-        
-        theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
-        
-        # 1. Draw Custom Rounded Track using active theme colors
-        track_rect = self.rect()
-        painter.setPen(QPen(QColor(f"{theme.scroll_border}"), 2))
-        painter.setBrush(QColor(f"{theme.scroll_track}"))
-        
-        if self.orientation() == Qt.Orientation.Vertical:
-            draw_rect = track_rect.adjusted(1, 10, -1, -10)
-            painter.drawRoundedRect(draw_rect, 7, 7)
-        else:
-            draw_rect = track_rect.adjusted(10, 1, -10, -1)
-            painter.drawRoundedRect(draw_rect, 7, 7)
-        
-        # 2. Draw Custom Rounded Handle
-        handle_rect = self.style().subControlRect(
-            QStyle.ComplexControl.CC_ScrollBar, opt, QStyle.SubControl.SC_ScrollBarSlider, self
-        )
-        if handle_rect.isValid() and not handle_rect.isEmpty():
-            painter.setPen(QPen(QColor(f"{theme.scroll_border}"), 2))
-            painter.setBrush(self.handle_color)
-            
-            if self.orientation() == Qt.Orientation.Vertical:
-                h_rect = handle_rect.adjusted(2, 2, -2, -2)
-                painter.drawRoundedRect(h_rect, 5, 5)
-            else:
-                h_rect = handle_rect.adjusted(2, 2, -2, -2)
-                painter.drawRoundedRect(h_rect, 5, 5)
-
-
 class CreateProjectOverlay(QWidget):
     """Modal overlay parented to stackedWidget with 50% opacity backdrop and resize/recentering event filter."""
     def __init__(self, parent=None, animator=None, activeFont=None, on_create_callback=None, controller=None):
-        super().__init__(parent) # parent is stackedWidget
+        super().__init__(parent)
         self.animator = animator
         self.activeFont = activeFont if activeFont else "Arial"
         self.on_create_callback = on_create_callback
         self.controller = controller
+        self.theme = controller.current_theme
+
+        self.is_submitting = False
         
         self.effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.effect)
@@ -97,18 +26,20 @@ class CreateProjectOverlay(QWidget):
             self.setGeometry(self.parent().rect())
             self.parent().installEventFilter(self)
 
+        # BG Mask
         self.backdrop = QWidget(self)
         self.backdrop.setGeometry(self.rect())
         self.backdrop.setStyleSheet("background-color: rgba(0, 0, 0, 128);")
 
+        # Main Dialog Box
         self.dialogBox = QWidget(self)
         self.dialogBox.setFixedSize(560, 420)
         self.updateDialogPosition()
         self.dialogBox.setStyleSheet(
             "QWidget {"
-            "    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #d1c7ff, stop:1 #85ccff);"
-            "    border: 4px solid black;"
-            "    border-radius: 20px;"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.project_bg.hex1}, stop:1 {self.theme.project_bg.hex2});"
+            f"    border: 4px solid {self.theme.project_border};"
+            f"    border-radius: 20px;"
             "}"
         )
 
@@ -118,25 +49,54 @@ class CreateProjectOverlay(QWidget):
 
         label_font = QFont(self.activeFont, 11, QFont.Weight.Bold)
 
+        # Project Name Row
         nameLayout = QHBoxLayout()
         nameLabel = QLabel("PROJECT NAME")
         nameLabel.setFont(label_font)
         nameLabel.setFixedWidth(130)
-        nameLabel.setStyleSheet("color: black; border: none; background: transparent;")
+        nameLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
         self.nameInput = QLineEdit()
-        self.nameInput.setStyleSheet("background-color: #f2fbe8; border: 3px solid black; border-radius: 10px; padding: 5px; font-size: 12px; color: black;")
+        self.nameInput.setFont(label_font)
+        self.nameInput.setStyleSheet(
+            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"border: 3px solid {self.theme.core_widgets_border};"
+            f"border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+        )
         nameLayout.addWidget(nameLabel)
         nameLayout.addWidget(self.nameInput)
         dialogLayout.addLayout(nameLayout)
 
+        # Deadline Row
+        deadlineLayout = QHBoxLayout()
+        deadlineLabel = QLabel("DEADLINE")
+        deadlineLabel.setFont(label_font)
+        deadlineLabel.setFixedWidth(130)
+        deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        self.deadlineInput = QLineEdit()
+        self.deadlineInput.setFont(label_font)
+        self.deadlineInput.setStyleSheet(
+            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"border: 3px solid {self.theme.core_widgets_border}; " 
+            f"border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+        )
+        deadlineLayout.addWidget(deadlineLabel, alignment=Qt.AlignmentFlag.AlignTop)
+        deadlineLayout.addWidget(self.deadlineInput)
+        dialogLayout.addLayout(deadlineLayout)
+
+        # Description Row
         descLayout = QHBoxLayout()
         descLabel = QLabel("DESCRIPTION")
         descLabel.setFont(label_font)
         descLabel.setFixedWidth(130)
-        descLabel.setStyleSheet("color: black; border: none; background: transparent;")
+        descLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
         self.descInput = QTextEdit()
+        self.descInput.setFont(label_font)
         self.descInput.setFixedHeight(75)
-        self.descInput.setStyleSheet("background-color: #f2fbe8; border: 3px solid black; border-radius: 10px; padding: 5px; font-size: 12px; color: black;")
+        self.descInput.setStyleSheet(
+            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"border: 3px solid {self.theme.core_widgets_border}; " 
+            f"border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+        )
         descLayout.addWidget(descLabel, alignment=Qt.AlignmentFlag.AlignTop)
         descLayout.addWidget(self.descInput)
         dialogLayout.addLayout(descLayout)
@@ -144,48 +104,51 @@ class CreateProjectOverlay(QWidget):
         midLayout = QHBoxLayout()
         midLayout.setSpacing(20)
 
-        tagsContainer = QVBoxLayout()
-        tagsLabel = QLabel("TAGS")
-        tagsLabel.setFont(label_font)
-        tagsLabel.setStyleSheet("color: black; border: none; background: transparent;")
+        # tagsContainer = QVBoxLayout()
+        # tagsLabel = QLabel("TAGS")
+        # tagsLabel.setFont(label_font)
+        # tagsLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
         
-        tagsControlsLayout = QHBoxLayout()
-        tagsBtnLayout = QVBoxLayout()
-        tagsBtnLayout.setSpacing(4)
+        # tagsControlsLayout = QHBoxLayout()
+        # tagsBtnLayout = QVBoxLayout()
+        # tagsBtnLayout.setSpacing(4)
         
-        for text in ["+", "-", "🔄"]:
-            b = QPushButton(text)
-            b.setFixedSize(28, 28)
-            b.setStyleSheet("border: 2px solid black; border-radius: 8px; background: white; font-weight: bold; color: black;")
-            tagsBtnLayout.addWidget(b)
+        # for text in ["+", "-", "🔄"]:
+        #     b = QPushButton(text)
+        #     b.setFixedSize(28, 28)
+        #     b.setStyleSheet("border: 2px solid black; border-radius: 8px; background: white; font-weight: bold; color: black;")
+        #     tagsBtnLayout.addWidget(b)
         
-        pillsWidget = QWidget()
-        pillsWidget.setStyleSheet("border: none; background: transparent;")
-        pillsLayout = QVBoxLayout(pillsWidget)
-        pillsLayout.setContentsMargins(0, 0, 0, 0)
-        pillsLayout.setSpacing(4)
-        for col in ["#b185ff", "#00ffff", "#ff69b4", "#ffa500", "#adff2f"]:
-            p = QWidget()
-            p.setFixedHeight(18); p.setFixedWidth(55)
-            p.setStyleSheet(f"background-color: {col}; border: 2px solid black; border-radius: 6px;")
-            pillsLayout.addWidget(p)
+        # pillsWidget = QWidget()
+        # pillsWidget.setStyleSheet("border: none; background: transparent;")
+        # pillsLayout = QVBoxLayout(pillsWidget)
+        # pillsLayout.setContentsMargins(0, 0, 0, 0)
+        # pillsLayout.setSpacing(4)
+        # for col in ["#b185ff", "#00ffff", "#ff69b4", "#ffa500", "#adff2f"]:
+        #     p = QWidget()
+        #     p.setFixedHeight(18); p.setFixedWidth(55)
+        #     p.setStyleSheet(f"background-color: {col}; border: 2px solid black; border-radius: 6px;")
+        #     pillsLayout.addWidget(p)
 
-        tagsControlsLayout.addLayout(tagsBtnLayout)
-        tagsControlsLayout.addWidget(pillsWidget)
-        tagsContainer.addWidget(tagsLabel)
-        tagsContainer.addLayout(tagsControlsLayout)
-        midLayout.addLayout(tagsContainer)
+        # tagsControlsLayout.addLayout(tagsBtnLayout)
+        # tagsControlsLayout.addWidget(pillsWidget)
+        # tagsContainer.addWidget(tagsLabel)
+        # tagsContainer.addLayout(tagsControlsLayout)
+        # midLayout.addLayout(tagsContainer)
 
-        tasksContainer = QVBoxLayout()
-        tasksLabel = QLabel("TASKS")
-        tasksLabel.setFont(label_font)
-        tasksLabel.setStyleSheet("color: black; border: none; background: transparent;")
-        self.tasksListWidget = QListWidget()
-        self.tasksListWidget.setFixedHeight(90)
-        self.tasksListWidget.setStyleSheet("background-color: #f2fbe8; border: 3px solid black; border-radius: 10px; padding: 5px; color: black;")
-        tasksContainer.addWidget(tasksLabel)
-        tasksContainer.addWidget(self.tasksListWidget)
-        midLayout.addLayout(tasksContainer, 1)
+        # tasksContainer = QVBoxLayout()
+        # tasksLabel = QLabel("TASKS")
+        # tasksLabel.setFont(label_font)
+        # tasksLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        # self.tasksListWidget = QListWidget()
+        # self.tasksListWidget.setFixedHeight(90)
+        # self.tasksListWidget.setStyleSheet(
+        #     f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+        #     f"border: 3px solid {self.theme.core_widgets_border};"
+        #     f"border-radius: 10px; padding: 5px; font-size: 12px; color: black;"
+        # )
+        # tasksContainer.addWidget(self.tasksListWidget)
+        # midLayout.addLayout(tasksContainer, 1)
 
         dialogLayout.addLayout(midLayout)
 
@@ -196,8 +159,8 @@ class CreateProjectOverlay(QWidget):
         self.btnCreate.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
         self.btnCreate.setFixedHeight(40)
         self.btnCreate.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 #73e7a7, stop:0.8 #08af40);"
-            "color: black; border: 3px solid black; border-radius: 18px;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_positivebutton_bg.hex1}, stop:0.8 {self.theme.core_positivebutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_positivebutton_border}; border-radius: 18px;"
         )
         self.btnCreate.clicked.connect(self.acceptOverlay)
 
@@ -205,8 +168,8 @@ class CreateProjectOverlay(QWidget):
         self.btnCancel.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
         self.btnCancel.setFixedHeight(40)
         self.btnCancel.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 #dd0202, stop:0.8 #c12659);"
-            "color: white; border: 3px solid black; border-radius: 18px;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_negativebutton_bg.hex1}, stop:0.8 {self.theme.core_negativebutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_negativebutton_border}; border-radius: 18px;"
         )
         self.btnCancel.clicked.connect(self.rejectOverlay)
 
@@ -240,10 +203,15 @@ class CreateProjectOverlay(QWidget):
         self.updateDialogPosition()
 
     def acceptOverlay(self):
+        if self.is_submitting:
+            return
+        
         name = self.nameInput.text().strip()
         desc = self.descInput.toPlainText().strip()
         if name and self.on_create_callback:
+            self.is_submitting = True
             self.on_create_callback(name, desc)
+            QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
         self.closeOverlay()
 
     def rejectOverlay(self):
@@ -268,24 +236,33 @@ class ProjectDetailPage(QWidget):
         self.controller = controller
         self.project = project
         self.activeFont = self.controller.activeJetFamFont
+        self.theme = self.controller.current_theme
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(20)
 
         headerWidget = QWidget()
-        headerWidget.setStyleSheet("background: rgba(40,40,40,0.85); border: 3px solid black; border-radius: 15px;")
+        headerWidget.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.theme.core_bg_widgets.hex1}, stop:1 {self.theme.core_bg_widgets.hex2});"
+            f"border: 3px solid {self.theme.core_widgets_border}; border-radius: 15px;"
+        )
         hLayout = QVBoxLayout(headerWidget)
         hLayout.setContentsMargins(20, 20, 20, 20)
         
         titleLbl = QLabel(self.project.name)
         titleLbl.setFont(QFont(self.activeFont, 22, QFont.Weight.Bold))
-        titleLbl.setStyleSheet("color: #00ffaa; border: none; background: transparent;")
+        titleLbl.setStyleSheet(
+            f"color: {self.theme.sidebar_activebtn};"
+            "border: none; background: transparent;"
+        )
         
         descLbl = QLabel(self.project.desc)
         descLbl.setFont(QFont(self.activeFont, 12, QFont.Weight.Light))
         descLbl.setWordWrap(True)
-        descLbl.setStyleSheet("color: white; border: none; background: transparent;")
+        descLbl.setStyleSheet(
+            f"color: {self.theme.core_widgets_gentext};"
+            "border: none; background: transparent;")
         
         hLayout.addWidget(titleLbl)
         hLayout.addWidget(descLbl)
@@ -293,8 +270,11 @@ class ProjectDetailPage(QWidget):
 
         tasksHeader = QLabel("TASKS & SUBTASKS")
         tasksHeader.setFont(QFont(self.activeFont, 16, QFont.Weight.Bold))
-        tasksHeader.setStyleSheet("color: white;")
+        tasksHeader.setStyleSheet(f"color: {self.theme.core_widgets_gentext};")
         layout.addWidget(tasksHeader)
+
+        btnContainer = QWidget(self)
+        btnContainerLayout = QHBoxLayout(btnContainer)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -312,13 +292,16 @@ class ProjectDetailPage(QWidget):
 
         for t in sample_tasks:
             taskBox = QWidget()
-            taskBox.setStyleSheet("background: rgba(60,60,60,0.9); border: 2px solid black; border-radius: 12px;")
+            taskBox.setStyleSheet(
+                f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.theme.project_bg.hex1}, stop:1 {self.theme.project_bg.hex2});"
+                f"border: 3px solid {self.theme.project_border}; border-radius: 15px;"
+            )
             tbLayout = QVBoxLayout(taskBox)
             tbLayout.setContentsMargins(15, 12, 15, 12)
             
             tName = QLabel(t["name"])
             tName.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
-            tName.setStyleSheet("color: #ffa500; border: none; background: transparent;")
+            tName.setStyleSheet("color: #ffa500; border: none; background: transparent;") # TODO: Figure out where in Themes to bind this colour
             tbLayout.addWidget(tName)
 
             for sub in t["subs"]:
@@ -338,16 +321,31 @@ class ProjectDetailPage(QWidget):
         tLayout.addStretch()
         scroll.setWidget(contentW)
         layout.addWidget(scroll, 1)
+        layout.addWidget(btnContainer)
 
-        self.btnBack = QPushButton("← BACK TO PROJECTS")
+        # Action Buttons
+        self.btnBack = QPushButton("BACK TO PROJECTS")
+        self.btnBack.setObjectName("backToList")
         self.btnBack.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
         self.btnBack.setFixedHeight(45)
         self.btnBack.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff6c24, stop:1 #ffa361);"
-            "color: black; border: 3px solid black; border-radius: 18px;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_negativebutton_bg.hex1}, stop:1 {self.theme.core_negativebutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_negativebutton_border}; border-radius: 18px;"
         )
         self.btnBack.clicked.connect(self.controller.returnToProjects)
-        layout.addWidget(self.btnBack)
+
+        self.btnDelete = QPushButton("DELETE PROJECT")
+        self.btnDelete.setObjectName("deleteProject")
+        self.btnDelete.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
+        self.btnDelete.setFixedHeight(45)
+        self.btnDelete.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_negativebutton_bg.hex1}, stop:1 {self.theme.core_negativebutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_negativebutton_border}; border-radius: 18px;"
+        )
+        self.btnDelete.clicked.connect(self.controller.returnToProjects)
+
+        btnContainerLayout.addWidget(self.btnBack)
+        btnContainerLayout.addWidget(self.btnDelete)
 
 
 class ProjectListPage(QWidget):
@@ -357,6 +355,7 @@ class ProjectListPage(QWidget):
         self.settingsFunctions = self.controller.settingsFunctions
         self.animator = self.controller.animator
         self.activeJetFamFont = self.controller.activeJetFamFont
+        self.theme = self.controller.current_theme
         
         self.saved_projects = DummyList.dummyProjects
 
@@ -375,25 +374,31 @@ class ProjectListPage(QWidget):
         self.main_button_newProject.setFixedHeight(45)
         self.main_button_newProject.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.main_button_newProject.setStyleSheet(
-            "color: white; border: 3px solid black; outline: none; border-radius: 18px; text-align: center;"
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0086b8, stop:1 #00ffaa);"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_positivebutton_border}; outline: none; border-radius: 18px; text-align: center;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_positivebutton_bg.hex1}, stop:1 {self.theme.core_positivebutton_bg.hex2});"
         )
         self.main_button_newProject.clicked.connect(self.createProject)
-        self.main_button_newProject.setHoverData(["border"], ["#000000"], ["#ffffff"])
+        self.main_button_newProject.setHoverData(["border"], [self.theme.core_positivebutton_border], [self.theme.core_positivebutton_border_hover])
 
         self.btnTags = HoverButton("TAGS", self, self.animator)
         self.btnTags.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btnTags.setFont(QFont(self.activeJetFamFont, 16, QFont.Weight.Bold))
         self.btnTags.setFixedHeight(45); self.btnTags.setFixedWidth(130)
-        self.btnTags.setStyleSheet("color: white; border: 3px solid black; outline: none; border-radius: 18px; background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0086b8, stop:1 #00ffaa);")
-        self.btnTags.setHoverData(["border"], ["#000000"], ["#ffffff"])
+        self.btnTags.setStyleSheet(
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_positivebutton_border}; outline: none; border-radius: 18px; text-align: center;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_positivebutton_bg.hex1}, stop:1 {self.theme.core_positivebutton_bg.hex2});"
+        )
+        self.btnTags.setHoverData(["border"], [self.theme.core_positivebutton_border], [self.theme.core_positivebutton_border_hover])
 
         self.btnArchived = HoverButton("ARCHIVED", self, self.animator)
         self.btnArchived.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btnArchived.setFont(QFont(self.activeJetFamFont, 16, QFont.Weight.Bold))
         self.btnArchived.setFixedHeight(45); self.btnArchived.setFixedWidth(160)
-        self.btnArchived.setStyleSheet("color: white; border: 3px solid black; outline: none; border-radius: 18px; background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0086b8, stop:1 #00ffaa);")
-        self.btnArchived.setHoverData(["border"], ["#000000"], ["#ffffff"])
+        self.btnArchived.setStyleSheet(
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_positivebutton_border}; outline: none; border-radius: 18px; text-align: center;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_positivebutton_bg.hex1}, stop:1 {self.theme.core_positivebutton_bg.hex2});"
+        )
+        self.btnArchived.setHoverData(["border"], [self.theme.core_positivebutton_border], [self.theme.core_positivebutton_border_hover])
 
         self.topActionBarLayout.addWidget(self.main_button_newProject)
         self.topActionBarLayout.addWidget(self.btnTags)
@@ -436,10 +441,15 @@ class ProjectListPage(QWidget):
         bottomBarLayout.setContentsMargins(5, 0, 5, 0)
 
         self.searchBar = QLineEdit(self)
-        self.searchBar.setPlaceholderText("🔍 SEARCH...")
+        self.searchBar.setPlaceholderText("🔍 SEARCH...") # TODO: replace emoji with proper icon
         self.searchBar.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
         self.searchBar.setFixedHeight(35); self.searchBar.setFixedWidth(280)
-        self.searchBar.setStyleSheet("background-color: rgba(0, 0, 0, 0.6); color: white; border: 2px solid #555; border-radius: 12px; padding-left: 10px;")
+        self.searchBar.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.theme.core_bg_side.hex1}, stop:1 {self.theme.core_bg_side.hex2});"
+            f"color: {self.theme.core_widgets_gentext};"
+            f"border: 2px solid {self.theme.core_widgets_border};"
+            f"border-radius: 12px; padding-left: 10px;"
+        )
 
         bottomBarLayout.addWidget(self.searchBar)
         bottomBarLayout.addStretch()
@@ -513,7 +523,10 @@ class ProjectListPage(QWidget):
     def emptyProjectsList(self):
         self.emptyProjectsAlert = QLabel("You currently have no projects.\nClick 'NEW PROJECT' above to start one!", self)
         self.emptyProjectsAlert.setFont(QFont(self.activeJetFamFont, 16, QFont.Weight.Light))
-        self.emptyProjectsAlert.setStyleSheet("color: white; text-align: center; border: none; background: transparent;")
+        self.emptyProjectsAlert.setStyleSheet(
+            f"color: {self.theme.core_widgets_gentext}; "
+            f"text-align: center; "
+            f"border: none; background: transparent;")
         self.emptyProjectsAlert.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.projectsGrid.addWidget(self.emptyProjectsAlert, 0, 0)
 
@@ -542,4 +555,8 @@ class ProjectListPage(QWidget):
         )
         new_proj.controller_ref = self.controller
         self.saved_projects.append(new_proj)
+        
+        # Persist changes to local JSON storage
+        DummyList.save_projects_to_json(self.saved_projects)
+        
         self.populateGrid()

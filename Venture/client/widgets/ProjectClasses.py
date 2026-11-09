@@ -1,15 +1,53 @@
-import Themes
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 import os
 
-class Project:
-    def __init__(self, projectID: int, name: str, desc: str, time_create: str, last_update: str, tasks, tags: list[QObject], icon: QIcon, progress: float, deadline):
-        self.dir_script = os.path.dirname(os.path.abspath(__file__))
-        settings_path = os.path.join(self.dir_script, "settings.ini")
-        self.settings = QSettings(settings_path, QSettings.Format.IniFormat)
+def get_resolved_icon_path(icon_str: str) -> str:
+    """Resolves an icon path dynamically, supporting built-in assets in icons/core and custom user files."""
+    if not icon_str:
+        return ""
+    
+    # Use directly if absolute path is valid
+    if os.path.exists(icon_str):
+        return icon_str
+    
+    # resolve relative to root assets/icons/core folder if above doesnt work
+    dir_script = os.path.dirname(os.path.abspath(__file__))       # client/widgets
+    client_dir = os.path.dirname(dir_script)                      # client
+    root_dir = os.path.dirname(client_dir)                        # Venture root
+    
+    base_name = os.path.basename(icon_str)
+    
+    # Check assets/icons/core/
+    core_path = os.path.join(root_dir, "assets", "icons", "core", base_name)
+    if os.path.exists(core_path):
+        return core_path
         
+    # Fallback to assets/icons/
+    legacy_path = os.path.join(root_dir, "assets", "icons", base_name)
+    if os.path.exists(legacy_path):
+        return legacy_path
+        
+    return ""
+
+def tint_pixmap(pixmap: QPixmap, color: QColor) -> QPixmap:
+    """Tints a QPixmap with a given QColor using SourceIn composition mode."""
+    if pixmap.isNull():
+        return pixmap
+    result = QPixmap(pixmap.size())
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(result.rect(), color)
+    painter.end()
+    return result
+
+class Project:
+    def __init__(self, projectID: int, name: str, desc: str, time_create: str, last_update: str, tasks, tags: list[QObject], icon, progress: float, deadline):
         maxLenName = 25
         maxLenDesc = 80
         
@@ -28,8 +66,6 @@ class Project:
         self.controller_ref = None
 
     def newDisplayWidget(self, parent: QObject=None, JBMLight: QFont=None, JBMBold:QFont=None):
-        FOLDER_ICONS = "icons"
-
         displayJBMLight = JBMLight if JBMLight else QFont("Arial", 10, QFont.Weight.Light)
         displayJBMBold = JBMBold if JBMBold else QFont("Arial", 14, QFont.Weight.Bold)
 
@@ -39,7 +75,6 @@ class Project:
         bgcol2 = QColor(f"{theme.project_bg.hex2}")
         textcol = QColor(f"{theme.project_text}")
         
-        # Border colors for hover animation
         self.bordercol = QColor(f"{theme.project_border}")
         self.borderHLcol = QColor(f"{theme.project_border_hover}")
 
@@ -80,12 +115,16 @@ class Project:
         topHeaderLayout.setSpacing(8)
 
         iconLabel = QLabel("", projectContentWidget)
-        if isinstance(self.icon, str) and os.path.exists(self.icon):
-            pixmap = QPixmap(self.icon)
+        resolved_icon = get_resolved_icon_path(self.icon)
+        if resolved_icon:
+            pixmap = QPixmap(resolved_icon)
             scaledPM = pixmap.scaled(QSize(32, 32), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            iconLabel.setPixmap(scaledPM)
+            tintedPM = tint_pixmap(scaledPM, textcol)
+            iconLabel.setPixmap(tintedPM)
         elif isinstance(self.icon, QIcon):
-            iconLabel.setPixmap(self.icon.pixmap(QSize(32, 32)))
+            pixmap = self.icon.pixmap(QSize(32, 32))
+            tintedPM = tint_pixmap(pixmap, textcol)
+            iconLabel.setPixmap(tintedPM)
         iconLabel.setStyleSheet("background: transparent; border: none;")
 
         nameLabel = QLabel(self.display_name, projectContentWidget)
@@ -103,7 +142,12 @@ class Project:
         statusRowLayout = QHBoxLayout()
         statusBadge = QLabel(" In Progress ", projectContentWidget)
         statusBadge.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        statusBadge.setStyleSheet("color: white; background-color: #5c3566; border: 2px solid black; border-radius: 8px; padding: 2px;")
+        statusBadge.setStyleSheet(
+            f"color: {theme.core_widgets_gentext};"
+            f"background-color: #5c3566;" # TODO: tie this to Theme data
+            f"border: 2px solid {theme.core_widgets_border};"
+            f"border-radius: 8px; padding: 2px;"
+        )
         
         timeLabel = QLabel("3d 5h 2m", projectContentWidget)
         timeLabel.setFont(QFont("Arial", 8, QFont.Weight.Bold))
@@ -124,7 +168,9 @@ class Project:
         progBar.setTextVisible(False)
         progBar.setFixedHeight(10)
         progBar.setStyleSheet(
-            "QProgressBar { border: 2px solid black; border-radius: 5px; background-color: black; }"
+            "QProgressBar {"
+                f"border: 2px solid {theme.core_widgets_border}; border-radius: 5px; background-color: {theme.core_widgets_border};"
+                "}"
             "QProgressBar::chunk { "
                 f"background: qlineargradient(x1:0, y:0.5, x2:1, y2:0.5, stop:0.2 {progBarcol1.name()}, stop:0.9 {progBarcol2.name()});"
             "   border-radius: 3px; }"
@@ -172,19 +218,21 @@ class Subtask:
         self.status = status
 
 class Tag:
-    def __init__(self, parentID: int, tagID: int, name: str, desc: str, colour):
+    def __init__(self, parentID: int, tagID: int, name: str, desc: str, textcolour, bgcolour):
         self.parentID = parentID
         self.tagID = tagID
         self.name = name
         self.desc = desc
-        self.colour = colour
+        self.textcolour = textcolour
+        self.bgcolour = bgcolour
 
     def newDisplayWidget(self, parent: QObject=None, parentWidget: QWidget=None):
+        theme = self.controller_ref.current_theme if (self.controller_ref and hasattr(self.controller_ref, 'current_theme')) else Themes.THEME_DEFAULT
         tagWidget = QWidget(parentWidget)
         tagWidget.setStyleSheet(
-            "border: 3px solid black;"
+            f"border: 3px solid {theme.core_widgets_border};"
             "border-radius: 10px;"
-            "color: white;"
+            f"color: {theme.core_widgets_gentext};"
             f"background-color: {self.colour};"
             "padding: 5px 10px;"
         )

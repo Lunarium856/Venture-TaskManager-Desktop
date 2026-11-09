@@ -3,6 +3,8 @@ import sys, os
 # Adds subfolders to Python's search path so cross-folder imports work smoothly
 current_dir = os.path.dirname(os.path.abspath(__file__))
 client_dir = os.path.dirname(current_dir)
+root_dir = os.path.dirname(client_dir)
+
 sys.path.append(os.path.join(client_dir, 'ui'))
 sys.path.append(os.path.join(client_dir, 'widgets'))
 sys.path.append(os.path.join(client_dir, 'core'))
@@ -32,29 +34,33 @@ class MainController(QMainWindow):
         QCoreApplication.setApplicationName("VentureApp")
 
         self.is_modal_active = False
-        self.current_theme = Themes.THEME_DEFAULT
+        self.settingsFunctions = SettingsHandler.Settings(self)
+
+        # Load & Retrieve Theme
+        if not self.settingsFunctions.value("theme"):
+            self.settingsFunctions.setValue("theme", "Venture")
+        theme_name = self.settingsFunctions.value("theme", "Venture")
+        self.current_theme = Themes.get_theme(theme_name)
+
+        self.animator = AnimationHandler.Animator()
 
         self.font_Mag = None
         self.font_JetFam = None
         self.font_FAILSAFE = "Arial"
 
-        folder_fonts = "fonts"
-        folder_icons = "icons"
-        dir_script = os.path.dirname(os.path.abspath(__file__))
-        self.settingsFunctions = SettingsHandler.Settings(self)
-
-        self.animator = AnimationHandler.Animator()
+        folder_fonts = os.path.join(root_dir, "assets", "fonts")
+        folder_icons = os.path.join(root_dir, "assets", "icons", "core")
 
         filename_Mag = "Magnolia Script.otf"
-        path_font_Mag = os.path.join(dir_script, folder_fonts, filename_Mag)
+        path_font_Mag = os.path.join(folder_fonts, filename_Mag)
 
-        self.icon_app = os.path.join(dir_script, folder_icons, "icon_app.png")
-        self.icon_sidebar_main = os.path.join(dir_script, folder_icons, "icon_sidebar_main.png")
-        self.icon_sidebar_settings = os.path.join(dir_script, folder_icons, "icon_sidebar_settings.png")
-        self.icon_sidebar_calendar = os.path.join(dir_script, folder_icons, "icon_sidebar_calendar.png")
-        self.icon_sidebar_tags = os.path.join(dir_script, folder_icons, "icon_sidebar_tags.png")
-        self.icon_sidebar_archive = os.path.join(dir_script, folder_icons, "icon_sidebar_archive.png")
-        self.icon_sidebar_about = os.path.join(dir_script, folder_icons, "icon_sidebar_about.png")
+        self.icon_app = os.path.join(folder_icons, "icon_app.png")
+        self.icon_sidebar_main = os.path.join(folder_icons, "icon_sidebar_main.png")
+        self.icon_sidebar_settings = os.path.join(folder_icons, "icon_sidebar_settings.png")
+        self.icon_sidebar_calendar = os.path.join(folder_icons, "icon_sidebar_calendar.png")
+        self.icon_sidebar_tags = os.path.join(folder_icons, "icon_sidebar_tags.png")
+        self.icon_sidebar_archive = os.path.join(folder_icons, "icon_sidebar_archive.png")
+        self.icon_sidebar_about = os.path.join(folder_icons, "icon_sidebar_about.png")
 
         self.iconList = [self.icon_sidebar_main, self.icon_sidebar_calendar, self.icon_sidebar_tags, 
                          self.icon_sidebar_archive, self.icon_sidebar_settings, self.icon_sidebar_about]
@@ -65,11 +71,10 @@ class MainController(QMainWindow):
                 font_families = QFontDatabase.applicationFontFamilies(fontID)
                 if font_families: self.font_Mag = font_families[0]
         
-        font_Jet_dir = os.path.join(dir_script, folder_fonts)
-        if os.path.exists(font_Jet_dir):
-            for filename in os.listdir(font_Jet_dir):
+        if os.path.exists(folder_fonts):
+            for filename in os.listdir(folder_fonts):
                 if "JetBrainsMono-Regular" in filename and filename.endswith(".ttf"):
-                    path_font_Jet = os.path.join(font_Jet_dir, filename)
+                    path_font_Jet = os.path.join(folder_fonts, filename)
                     fontID = QFontDatabase.addApplicationFont(path_font_Jet)
                     if fontID != -1:
                         font_families = QFontDatabase.applicationFontFamilies(fontID)
@@ -94,7 +99,7 @@ class MainController(QMainWindow):
         self.sidebarLayout.setContentsMargins(0, 30, 0, 50)
         self.sidebarLayout.setSpacing(20)
         self.sidebarWidget.setStyleSheet(
-            "background-color: #1e1e1e;"
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.current_theme.core_bg_side.hex1}, stop:1 {self.current_theme.core_bg_side.hex2});"
             "padding: 0px;"
             "border-left: 4px solid black;"
         )
@@ -105,7 +110,7 @@ class MainController(QMainWindow):
 
         self.label_appname = QLabel("Venture", self)
         self.label_appname.setFont(QFont(self.activeMagFont, 42))
-        self.label_appname.setStyleSheet("color: white; border: none; background: transparent;")
+        self.label_appname.setStyleSheet(f"color: {self.current_theme.core_widgets_gentext} ; border: none; background: transparent;")
         self.label_appname.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self.sidebar_button_main = QPushButton(" Projects", self)
@@ -134,8 +139,8 @@ class MainController(QMainWindow):
                 try:
                     button.setIcon(QIcon(icon))
                     button.setIconSize(QSize(24, 24))
-                    init_color = QColor("#00ffaa") if button == self.activeButton else QColor("#ffffff")
-                    self.animator.createAnimation(button, "icon", QColor("#000000"), init_color, duration=1).start()
+                    init_color = QColor(f"{self.current_theme.sidebar_activebtn}") if button == self.activeButton else QColor(f"{self.current_theme.sidebar_neutralbtn}")
+                    self.animator.createAnimation(button, "icon", QColor("#000000"), init_color, duration=1).start() # 000000 used as baseline placeholder colour upon init
                 except IndexError: pass
 
         for button in self.sidebarBtnList:
@@ -144,13 +149,13 @@ class MainController(QMainWindow):
             button.setMaximumWidth(260)
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             button.setStyleSheet(
-                "color: #cccccc;"
-                "border: 2px solid #1e1e1e;"
-                "outline: none;"
-                "text-align: left;"
-                "padding: 8px 12px;"
-                "background: transparent;"
-                "border-radius: 12px;"
+                f"color: {self.current_theme.sidebar_neutralbtn};"
+                f"border: 2px solid {self.current_theme.sidebar_neutralbtn_border};"
+                f"outline: none;"
+                f"text-align: left;"
+                f"padding: 8px 12px;"
+                f"background: {self.current_theme.sidebar_neutralbtn_bg};"
+                f"border-radius: 12px;"
             )
             self.sidebarButtonLayout.addWidget(button, alignment=Qt.AlignmentFlag.AlignHCenter)
             if button != self.activeButton:
@@ -241,6 +246,9 @@ class MainController(QMainWindow):
     def returnToProjects(self):
         self.stackedWidget.setCurrentWidget(self.page_project_list)
 
+    def deleteProject(self):
+        pass
+
     def updateSidebar(self, new_active_btn):
         if not new_active_btn or self.activeButton == new_active_btn:
             return
@@ -252,65 +260,134 @@ class MainController(QMainWindow):
         
         for btn in self.sidebarBtnList:
             if btn != self.activeButton:
-                btn.setStyleSheet("color: #cccccc; border: 2px solid #1e1e1e; outline: none; text-align: left; padding: 8px 12px; background: transparent; border-radius: 12px;")
-                self.animator.createAnimation(btn, "icon", QColor("#00ffaa"), QColor("#ffffff"), duration=1).start()
+                btn.setStyleSheet(
+                    f"color: {self.current_theme.sidebar_neutralbtn};"
+                    f"border: 2px solid {self.current_theme.sidebar_neutralbtn_border}; "
+                    f"outline: none; text-align: left; padding: 8px 12px; "
+                    f"background: {self.current_theme.sidebar_neutralbtn_bg}; border-radius: 12px;"
+                )
+                self.animator.createAnimation(btn, "icon", QColor(f"{self.current_theme.sidebar_activebtn}"), QColor(f"{self.current_theme.sidebar_neutralbtn}"), duration=1).start()
                 btn.installEventFilter(self)
 
         self.animator.animateOnHover(
             old_btn,
             ["text", "icon", "background", "border"],
-            [QColor("#00ffaa"), QColor("#00ffaa"), QColor(44, 44, 44, 255), QColor("#444444")],
-            [QColor("#cccccc"), QColor("#ffffff"), QColor(0, 0, 0, 0), QColor("#1e1e1e")],
+            [
+                QColor(f"{self.current_theme.sidebar_activebtn}"), 
+                QColor(f"{self.current_theme.sidebar_activebtn}"), 
+                QColor(f"{self.current_theme.sidebar_highlightedbtn_bg}"), 
+                QColor(f"{self.current_theme.sidebar_highlightedbtn_border}")
+            ],
+            [
+                QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                QColor(f"{self.current_theme.sidebar_neutralbtn_bg}"), 
+                QColor(f"{self.current_theme.sidebar_neutralbtn_border}")
+            ],
             duration=200
         )
-        old_btn.setStyleSheet("color: #cccccc; border: 2px solid #1e1e1e; outline: none; text-align: left; padding: 8px 12px; background: transparent; border-radius: 12px;")
+        old_btn.setStyleSheet(
+            f"color: {self.current_theme.sidebar_neutralbtn};"
+            f"border: 2px solid {self.current_theme.sidebar_neutralbtn_border};"
+            "outline: none; text-align: left; padding: 8px 12px;"
+            "background: transparent; border-radius: 12px;"
+        )
         old_btn.installEventFilter(self)
 
         self.animator.animateOnHover(
             new_active_btn,
             ["text", "icon", "background", "border"],
-            [QColor("#cccccc"), QColor("#ffffff"), QColor(0, 0, 0, 0), QColor("#1e1e1e")],
-            [QColor("#00ffaa"), QColor("#00ffaa"), QColor(44, 44, 44, 255), QColor("#444444")],
+            [
+                QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                QColor(f"{self.current_theme.sidebar_neutralbtn_bg}"), 
+                QColor(f"{self.current_theme.sidebar_neutralbtn_border}")
+            ],
+            [
+                QColor(f"{self.current_theme.sidebar_activebtn}"), 
+                QColor(f"{self.current_theme.sidebar_activebtn}"), 
+                QColor(f"{self.current_theme.sidebar_highlightedbtn_bg}"), 
+                QColor(f"{self.current_theme.sidebar_highlightedbtn_border}")
+            ],
             duration=200
         )
         new_active_btn.removeEventFilter(self)
 
     def updateActiveBtn(self, button, animate=True):
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        button.setStyleSheet("color: #00ffaa; background: #2c2c2c; border: 2px solid #444444; border-radius: 12px; outline: none; text-align: left; padding: 8px 12px;")
-        self.animator.createAnimation(button, "icon", QColor("#ffffff"), QColor("#00ffaa"), duration=1).start()
+        button.setStyleSheet(
+            f"color: {self.current_theme.sidebar_activebtn};" 
+            f"background: {self.current_theme.sidebar_highlightedbtn_bg};"
+            f"border: 2px solid {self.current_theme.sidebar_highlightedbtn_border};"
+            f"border-radius: 12px; outline: none; text-align: left; padding: 8px 12px;"
+        )
+        self.animator.createAnimation(button, "icon", QColor(f"{self.current_theme.sidebar_neutralbtn}"), QColor(f"{self.current_theme.sidebar_activebtn}"), duration=1).start()
 
     def eventFilter(self, obj: QObject, event):
         if self.is_modal_active:
-            return True
+            if event.type() in (QEvent.Type.Enter, QEvent.Type.Leave, QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick):
+                return True
+            return False
 
         if isinstance(obj, QPushButton) and obj in self.sidebarBtnList and obj != self.activeButton:
             if event.type() == QEvent.Type.Enter:
                 anim = self.animator.animateOnHover(
                     obj,
                     ["text", "icon", "background", "border"],
-                    [QColor("#cccccc"), QColor("#ffffff"), QColor(0, 0, 0, 0), QColor("#1e1e1e")],
-                    [QColor("#ffffff"), QColor("#ffffff"), QColor(37, 37, 37, 255), QColor("#333333")],
+                    [
+                        QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_neutralbtn_bg}"), 
+                        QColor(f"{self.current_theme.sidebar_neutralbtn_border}")
+                    ],
+                    [
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn_bg}"), 
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn_border}")
+                    ],
                     duration=200
                 )
-                anim.finished.connect(lambda: obj.setStyleSheet("color: #ffffff; border: 2px solid #333333; outline: none; text-align: left; padding: 8px 12px; background: rgba(37, 37, 37, 255); border-radius: 12px;"))
+                anim.finished.connect(lambda: obj.setStyleSheet(
+                    f"color: {self.current_theme.sidebar_highlightedbtn};"
+                    f"border: 2px solid {self.current_theme.sidebar_highlightedbtn_border};"
+                    f"outline: none; text-align: left; padding: 8px 12px;"
+                    f"background: {self.current_theme.sidebar_highlightedbtn_bg};"
+                    f"border-radius: 12px;"
+                ))
                 return True
             elif event.type() == QEvent.Type.Leave:
                 anim = self.animator.animateOnHover(
                     obj,
                     ["text", "icon", "background", "border"],
-                    [QColor("#ffffff"), QColor("#ffffff"), QColor(37, 37, 37, 255), QColor("#333333")],
-                    [QColor("#cccccc"), QColor("#ffffff"), QColor(0, 0, 0, 0), QColor("#1e1e1e")],
+                    [
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn_bg}"), 
+                        QColor(f"{self.current_theme.sidebar_highlightedbtn_border}")
+                    ],
+                    [
+                        QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_neutralbtn}"), 
+                        QColor(f"{self.current_theme.sidebar_neutralbtn_bg}"), 
+                        QColor(f"{self.current_theme.sidebar_neutralbtn_border}")
+                    ],
                     duration=200
                 )
-                anim.finished.connect(lambda: obj.setStyleSheet("color: #cccccc; border: 2px solid #1e1e1e; outline: none; text-align: left; padding: 8px 12px; background: transparent; border-radius: 12px;"))
+                anim.finished.connect(lambda: obj.setStyleSheet(
+                    f"color: {self.current_theme.sidebar_neutralbtn};"
+                    f"border: 2px solid {self.current_theme.sidebar_neutralbtn_border};"
+                    f"outline: none; text-align: left; padding: 8px 12px;"
+                    f"background: {self.current_theme.sidebar_neutralbtn_bg};"
+                    f"border-radius: 12px;"
+                ))
                 return True
         return super().eventFilter(obj, event)
 
     def setBGColour(self):
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor("#3e3e3e"))
-        gradient.setColorAt(1.0, QColor("#1a1a1a"))
+        gradient.setColorAt(0.0, QColor(f"{self.current_theme.core_bg_main.hex1}"))
+        gradient.setColorAt(1.0, QColor(f"{self.current_theme.core_bg_main.hex2}"))
         palette = self.palette()
         palette.setBrush(QPalette.ColorRole.Window, QBrush(gradient))
         self.setPalette(palette)

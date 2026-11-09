@@ -2,24 +2,43 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GradientColourLayer:
-    path1: str
     hex1: str
-    path2: str
     hex2: str
 
 @dataclass(frozen=True)
 class Theme:
     name: str
-    bg_main: GradientColourLayer
-    bg_sidebar: GradientColourLayer
-    bg_widgets: GradientColourLayer
-    text_content: GradientColourLayer
-    text_button: GradientColourLayer
-    active_button: GradientColourLayer
+
+    # Core
+    core_bg_main: GradientColourLayer
+    core_bg_side: GradientColourLayer
+    core_bg_widgets: GradientColourLayer
+    core_widgets_gentext: str
+    core_widgets_btntext: str
+    core_widgets_border: str
+
+    core_positivebutton_bg: GradientColourLayer
+    core_positivebutton_border: str
+    core_positivebutton_border_hover: str
+
+    core_negativebutton_bg: GradientColourLayer
+    core_negativebutton_border: str
+    core_negativebutton_border_hover: str
+
+    sidebar_neutralbtn: str
+    sidebar_neutralbtn_bg: str
+    sidebar_neutralbtn_border: str
+    sidebar_highlightedbtn: str
+    sidebar_highlightedbtn_bg: str
+    sidebar_highlightedbtn_border: str
+    sidebar_activebtn: str
+    
     scroll_track: str
     scroll_handle: str
     scroll_handle_hover: str
     scroll_border: str
+
+    # Menu Project List
     project_bg: GradientColourLayer
     project_text: str
     project_border: str
@@ -32,62 +51,96 @@ class Theme:
 
 THEME_DEFAULT = Theme(
     name="Venture",
-    bg_main=GradientColourLayer("main/bg1", "#3e3e3e", "main/bg2", "#1e1e1e"),
-    bg_sidebar=GradientColourLayer("side/bg1", "#3e3e3e", "side/bg2", "#1e1e1e"),
-    bg_widgets=GradientColourLayer("txt/c1", "#ffffff", "widgets/c2", "#aaaaaa"),
-    text_content=GradientColourLayer("txt/c1", "#ffffff", "txt/c2", "#aaaaaa"),
-    text_button=GradientColourLayer("btn/c1", "#ffffff", "btn/c2", "#aaaaaa"),
-    active_button=GradientColourLayer("act/c1", "#00ff00", "act/c2", "#00aa00"),
+
+    core_bg_main=GradientColourLayer("#3e3e3e", "#1e1e1e"),
+    core_bg_side=GradientColourLayer("#313131", "#1f1f1f"),
+    core_bg_widgets=GradientColourLayer("#181818", "#252525"),
+    core_widgets_gentext="#ffffff",
+    core_widgets_btntext="#ffffff",
+    core_widgets_border="#000000",
+
+    core_positivebutton_bg=GradientColourLayer("#00a0bd", "#35ffbc"),
+    core_positivebutton_border="#000000",
+    core_positivebutton_border_hover="#ffffff",
+
+    core_negativebutton_bg=GradientColourLayer("#ff2b24", "#ff6c24"),
+    core_negativebutton_border="#000000",
+    core_negativebutton_border_hover="#ffffff",
+
+    sidebar_neutralbtn="#cccccc",
+    sidebar_neutralbtn_bg="transparent",
+    sidebar_neutralbtn_border="#1e1e1e",
+    sidebar_highlightedbtn="#ffffff",
+    sidebar_highlightedbtn_bg="#1e1e1e",
+    sidebar_highlightedbtn_border="#444444",
+    sidebar_activebtn="#23f3d7",
+
     scroll_track="#353535",
     scroll_handle="#444444",
-    scroll_handle_hover="#ffffff",
+    scroll_handle_hover="#93fcee",
     scroll_border="#000000",
-    project_bg=GradientColourLayer("project/bg1", "#6e6e6e", "project/bg2", "#535353"),
+
+    project_bg=GradientColourLayer("#6e6e6e", "#535353"),
     project_text="#ffffff",
     project_border="#000000",
-    project_border_hover="#08af40",
-    project_progress=GradientColourLayer("project/prog1", "#9dc7ff", "project/prog2", "#c0d7ff")
+    project_border_hover="#23f3d7",
+    project_progress=GradientColourLayer("#00a0bd", "#35ffbc")
 )
 
-THEME_RETROBRIGHT = Theme(
-    name="Retro-Bright",
-    bg_main=GradientColourLayer("main/bg1", "#3e3e3e", "main/bg2", "#1e1e1e"),
-    bg_sidebar=GradientColourLayer("side/bg1", "#3e3e3e", "side/bg2", "#1e1e1e"),
-    bg_widgets=GradientColourLayer("txt/c1", "#ffffff", "widgets/c2", "#aaaaaa"),
-    text_content=GradientColourLayer("txt/c1", "#ffffff", "txt/c2", "#aaaaaa"),
-    text_button=GradientColourLayer("btn/c1", "#ffffff", "btn/c2", "#aaaaaa"),
-    active_button=GradientColourLayer("act/c1", "#00ff00", "act/c2", "#00aa00"),
-    scroll_track="#353535",
-    scroll_handle="#444444",
-    scroll_handle_hover="#ffffff",
-    scroll_border="#000000",
-    project_bg=GradientColourLayer("project/bg1", "#6e6e6e", "project/bg2", "#535353"),
-    project_text="#000000",
-    project_border="#000000",
-    project_border_hover="#08af40",
-    project_progress=GradientColourLayer("project/prog1", "#9dc7ff", "project/prog2", "#c0d7ff")
-)
+
+# Temporarily commented out the Retrobright theme because I keep changing the values here when trying to test things
 
 # THEME_RETROBRIGHT = Theme(
 #     name="Retro-Bright",
-#     bg_main=GradientColourLayer("main/bg1", "#3e3e3e", "main/bg2", "#1e1e1e"),
-#     bg_sidebar=GradientColourLayer("side/bg1", "#3e3e3e", "side/bg2", "#1e1e1e"),
-#     bg_widgets=GradientColourLayer("txt/c1", "#ffffff", "widgets/c2", "#aaaaaa"),
-#     text_content=GradientColourLayer("txt/c1", "#ffffff", "txt/c2", "#aaaaaa"),
-#     text_button=GradientColourLayer("btn/c1", "#ffffff", "btn/c2", "#aaaaaa"),
-#     active_button=GradientColourLayer("act/c1", "#00ff00", "act/c2", "#00aa00"),
+    
+#     core_bg_main=GradientColourLayer("#d1c7ff", "#85ccff"),
+#     core_bg_side=GradientColourLayer("#313131", "#1f1f1f"),
+#     core_bg_widgets=GradientColourLayer("#181818", "#252525"),
+#     core_widgets_gentext="#ffffff",
+#     core_widgets_btntext="#ffffff",
+#     core_widgets_border="#000000",
+
+#     core_positivebutton_bg=GradientColourLayer("#00a0bd", "#35ffbc"),
+#     core_positivebutton_border="#535353",
+#     core_positivebutton_border_hover="#ffffff",
+
+#     core_negativebutton_bg=GradientColourLayer("#ff6c24", "#ffa361"),
+#     core_negativebutton_border="#535353",
+#     core_negativebutton_border_hover="#ffffff",
+
+#     sidebar_neutralbtn="#cccccc",
+#     sidebar_neutralbtn_bg="transparent",
+#     sidebar_neutralbtn_border="#1e1e1e",
+#     sidebar_highlightedbtn="#ffffff",
+#     sidebar_highlightedbtn_bg="#1e1e1e",
+#     sidebar_highlightedbtn_border="#444444",
+#     sidebar_activebtn="#23f3d7",
+
 #     scroll_track="#353535",
 #     scroll_handle="#444444",
-#     scroll_handle_hover="#ffffff",
+#     scroll_handle_hover="#93fcee",
 #     scroll_border="#000000",
-#     project_bg=GradientColourLayer("project/bg1", "#9dc7ff", "project/bg2", "#c0d7ff"),
-#     project_text="#000000",
+
+#     project_bg=GradientColourLayer("#6e6e6e", "#535353"),
+#     project_text="#ffffff",
 #     project_border="#000000",
-#     project_border_hover="#08af40",
-#     project_progress=GradientColourLayer("project/prog1", "#00ff0a", "project/prog2", "#c2fabf")
+#     project_border_hover="#23f3d7",
+#     project_progress=GradientColourLayer("#00a0bd", "#35ffbc")
 # )
 
-# THEME_RETROBRIGHT = Theme()
+AVAILABLE_THEMES = {
+    "Venture": THEME_DEFAULT
+}
+
+# AVAILABLE_THEMES = {
+#     "Venture": THEME_DEFAULT,
+#     "Retro-Bright": THEME_RETROBRIGHT
+# }
+
+def get_theme(name: str) -> Theme:
+    """Retrieves a theme by name, falling back to default if not found."""
+    return AVAILABLE_THEMES.get(name, THEME_DEFAULT)
+
 # THEME_PYTHON = Theme()
 # THEME_SPRING = Theme()
 # THEME_SUMMER = Theme()

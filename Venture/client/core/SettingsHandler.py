@@ -62,7 +62,7 @@ class Settings:
 
     def setValue(self, key_path, value):
         """
-        Sets a value using slash notation and immediately persists to JSON.
+        Sets a value using slash notation & immediately persists to JSON.
         """
         keys = key_path.replace("\\", "/").split("/")
         d = self.data

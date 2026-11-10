@@ -6,8 +6,95 @@ from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 import sys, json, os, time, datetime, re, sqlite3
 
+# Data persistence setup moved from DummyList
+dir_script = os.path.dirname(os.path.abspath(__file__))       # client/core
+client_dir = os.path.dirname(dir_script)                      # client
+data_dir = os.path.join(client_dir, "data")
+
+if not os.path.exists(data_dir):
+    os.makedirs(data_dir)
+
+projects_json_path = os.path.join(data_dir, "projects.json")
+
+def load_projects_from_json():
+    """Loads projects from projects.json, creating it with dummy seed data if missing."""
+    if not os.path.exists(projects_json_path):
+        initial_projects = DummyList.get_initial_dummy_projects()
+        save_projects_to_json(initial_projects)
+        return initial_projects
+    
+    try:
+        with open(projects_json_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+            projects = []
+            for item in raw_data:
+                tags = [
+                    Tag(
+                        item["projectID"], 
+                        t["tagID"], 
+                        t["name"], 
+                        t["desc"], 
+                        t.get("textcolour", "#ffffff"),
+                        t.get("bgcolour", t.get("colour", "#ff0000"))
+                    ) 
+                    for t in item.get("tags", [])
+                ]
+                proj = Project(
+                    projectID=item["projectID"],
+                    name=item["name"],
+                    desc=item["desc"],
+                    time_create=item["time_create"],
+                    time_elapsed=item.get("time_elapsed", "0d 0h 0m"),
+                    last_update=item["last_update"],
+                    tasks=item.get("tasks", []),
+                    tags=tags,
+                    icon=item["icon"],
+                    progress=item["progress"],
+                    deadline=item["deadline"]
+                )
+                proj.is_archived = item.get("is_archived", False)
+                projects.append(proj)
+            return projects
+    except (json.JSONDecodeError, IOError):
+        return DummyList.get_initial_dummy_projects()
+
+def save_projects_to_json(projects_list):
+    """Saves the given project objects list to projects.json."""
+    raw_data = []
+    for proj in projects_list:
+        tags_data = [
+            {
+                "tagID": t.tagID,
+                "name": t.name,
+                "desc": t.desc,
+                "textcolour": getattr(t, "textcolour", "#ffffff"),
+                "bgcolour": getattr(t, "bgcolour", "#ff0000")
+            } for t in proj.tags
+        ]
+        raw_data.append({
+            "projectID": proj.projectID,
+            "name": proj.name,
+            "desc": proj.desc,
+            "time_create": proj.time_create,
+            "time_elapsed": getattr(proj, "time_elapsed", "0d 0h 0m"),
+            "last_update": proj.last_update,
+            "tasks": proj.tasks,
+            "tags": tags_data,
+            "icon": proj.icon,
+            "progress": proj.progress,
+            "deadline": proj.deadline,
+            "is_archived": getattr(proj, "is_archived", False)
+        })
+    
+    try:
+        with open(projects_json_path, "w", encoding="utf-8") as f:
+            json.dump(raw_data, f, indent=4)
+    except IOError as e:
+        print(f"Error saving projects: {e}")
+
+
 class CreateProjectOverlay(QWidget):
-    """Modal overlay parented to stackedWidget with 50% opacity backdrop and resize/recentering event filter."""
+    """Modal overlay parented to stackedWidget with 50% opacity backdrop & resize/recentering event filter."""
     def __init__(self, parent=None, animator=None, activeFont=None, on_create_callback=None, controller=None):
         super().__init__(parent)
         self.animator = animator
@@ -72,13 +159,99 @@ class CreateProjectOverlay(QWidget):
         deadlineLabel.setFont(label_font)
         deadlineLabel.setFixedWidth(130)
         deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-        self.deadlineInput = QLineEdit()
+        self.deadlineInput = QDateEdit()
+        self.deadlineInput.setDate(QDate.currentDate())
+        self.deadlineInput.setCalendarPopup(True)
         self.deadlineInput.setFont(label_font)
         self.deadlineInput.setStyleSheet(
-            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
-            f"border: 3px solid {self.theme.core_widgets_border}; " 
-            f"border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+            f"QDateEdit {{"
+            f"    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    border: 3px solid {self.theme.core_widgets_border};"
+            f"    border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+            f"}}"
+            f"QDateEdit::drop-down {{"
+            f"    subcontrol-origin: padding;"
+            f"    subcontrol-position: top right;"
+            f"    width: 30px;"
+            f"    border-left: 3px solid {self.theme.core_widgets_border};"
+            f"    border-top-right-radius: 7px;"
+            f"    border-bottom-right-radius: 7px;"
+            f"    background-color: {self.theme.scroll_track};"
+            f"}}"
+            f"QDateEdit::down-arrow {{"
+            f"    width: 0px;"
+            f"    height: 0px;"
+            f"    border-left: 5px solid transparent;"
+            f"    border-right: 5px solid transparent;"
+            f"    border-top: 6px solid {self.theme.core_widgets_gentext};"
+            f"    margin-right: 1px;"
+            f"}}"
         )
+        calendar = self.deadlineInput.calendarWidget()
+        if calendar:
+            calendar.setMinimumWidth(340)
+            calendar.setMinimumHeight(260)
+            calendar.setFont(QFont(self.activeFont, 11, QFont.Weight.Light))
+            
+            header_format = QTextCharFormat()
+            header_format.setBackground(QColor(self.theme.core_bg_widgets.hex1))
+            header_format.setForeground(QColor(self.theme.core_widgets_gentext))
+            calendar.setHeaderTextFormat(header_format)
+
+            calendar.setStyleSheet(
+                # Outer popup container
+                f"QCalendarWidget {{"
+                f"    background-color: {self.theme.core_bg_widgets.hex2};"
+                f"    border: 3px solid {self.theme.core_widgets_border};"
+                f"    border-radius: 12px;"
+                f"    selection-background-color: {self.theme.sidebar_activebtn};"
+                f"    selection-color: black;"
+                f"}}"
+                
+                # Top NavBar
+                f"QCalendarWidget QWidget#qt_calendar_navigationbar {{"
+                f"    background-color: {self.theme.core_bg_widgets.hex1};"
+                f"    border-top-left-radius: 9px;"
+                f"    border-top-right-radius: 9px;"
+                f"    border-bottom: 1px solid {self.theme.core_widgets_border};"
+                f"    padding: 4px;"
+                f"    margin: 4px 4px 0px 4px;"
+                f"}}"
+                f"QCalendarWidget QToolButton {{"
+                f"    color: {self.theme.core_widgets_gentext};"
+                f"    background-color: {self.theme.scroll_track};"
+                f"    border: 1px solid {self.theme.core_widgets_border};"
+                f"    border-radius: 5px;"
+                f"    margin: 3px;"
+                f"    padding: 3px;"
+                f"}}"
+                f"QCalendarWidget QToolButton:hover {{"
+                f"    background-color: {self.theme.sidebar_activebtn};"
+                f"    color: black;"
+                f"}}"
+                
+                # Dropdown menu for month/year selectors
+                f"QCalendarWidget QMenu {{"
+                f"    background-color: {self.theme.core_bg_widgets.hex2};"
+                f"    color: {self.theme.core_widgets_gentext};"
+                f"    border: 1px solid {self.theme.core_widgets_border};"
+                f"}}"
+                f"QCalendarWidget QMenu::item:selected {{"
+                f"    background-color: {self.theme.sidebar_activebtn};"
+                f"    color: black;"
+                f"}}"
+                
+                # Month Grid Table View
+                f"QCalendarWidget QTableView {{"
+                f"    background-color: {self.theme.core_bg_widgets.hex1};"
+                f"    color: {self.theme.core_widgets_gentext};"
+                f"    border: none;"
+                f"    outline: none;"
+                f"    margin: 4px;"
+                f"    border-bottom-left-radius: 9px;"
+                f"    border-bottom-right-radius: 9px;"
+                f"}}"
+            )
         deadlineLayout.addWidget(deadlineLabel, alignment=Qt.AlignmentFlag.AlignTop)
         deadlineLayout.addWidget(self.deadlineInput)
         dialogLayout.addLayout(deadlineLayout)
@@ -103,53 +276,6 @@ class CreateProjectOverlay(QWidget):
 
         midLayout = QHBoxLayout()
         midLayout.setSpacing(20)
-
-        # tagsContainer = QVBoxLayout()
-        # tagsLabel = QLabel("TAGS")
-        # tagsLabel.setFont(label_font)
-        # tagsLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-        
-        # tagsControlsLayout = QHBoxLayout()
-        # tagsBtnLayout = QVBoxLayout()
-        # tagsBtnLayout.setSpacing(4)
-        
-        # for text in ["+", "-", "🔄"]:
-        #     b = QPushButton(text)
-        #     b.setFixedSize(28, 28)
-        #     b.setStyleSheet("border: 2px solid black; border-radius: 8px; background: white; font-weight: bold; color: black;")
-        #     tagsBtnLayout.addWidget(b)
-        
-        # pillsWidget = QWidget()
-        # pillsWidget.setStyleSheet("border: none; background: transparent;")
-        # pillsLayout = QVBoxLayout(pillsWidget)
-        # pillsLayout.setContentsMargins(0, 0, 0, 0)
-        # pillsLayout.setSpacing(4)
-        # for col in ["#b185ff", "#00ffff", "#ff69b4", "#ffa500", "#adff2f"]:
-        #     p = QWidget()
-        #     p.setFixedHeight(18); p.setFixedWidth(55)
-        #     p.setStyleSheet(f"background-color: {col}; border: 2px solid black; border-radius: 6px;")
-        #     pillsLayout.addWidget(p)
-
-        # tagsControlsLayout.addLayout(tagsBtnLayout)
-        # tagsControlsLayout.addWidget(pillsWidget)
-        # tagsContainer.addWidget(tagsLabel)
-        # tagsContainer.addLayout(tagsControlsLayout)
-        # midLayout.addLayout(tagsContainer)
-
-        # tasksContainer = QVBoxLayout()
-        # tasksLabel = QLabel("TASKS")
-        # tasksLabel.setFont(label_font)
-        # tasksLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-        # self.tasksListWidget = QListWidget()
-        # self.tasksListWidget.setFixedHeight(90)
-        # self.tasksListWidget.setStyleSheet(
-        #     f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
-        #     f"border: 3px solid {self.theme.core_widgets_border};"
-        #     f"border-radius: 10px; padding: 5px; font-size: 12px; color: black;"
-        # )
-        # tasksContainer.addWidget(self.tasksListWidget)
-        # midLayout.addLayout(tasksContainer, 1)
-
         dialogLayout.addLayout(midLayout)
 
         bottomBtnLayout = QHBoxLayout()
@@ -207,11 +333,145 @@ class CreateProjectOverlay(QWidget):
             return
         
         name = self.nameInput.text().strip()
+        deadline = self.deadlineInput.text().strip()
         desc = self.descInput.toPlainText().strip()
         if name and self.on_create_callback:
             self.is_submitting = True
-            self.on_create_callback(name, desc)
+            self.on_create_callback(name, deadline, desc)
             QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
+        self.closeOverlay()
+
+    def rejectOverlay(self):
+        self.closeOverlay()
+
+    def closeOverlay(self):
+        if self.parent():
+            self.parent().removeEventFilter(self)
+        self.fadeOutAnim = self.animator.createAnimation(self, "opacity", 1.0, 0.0, duration=300)
+        if self.fadeOutAnim:
+            self.fadeOutAnim.finished.connect(self.deleteLater)
+            self.fadeOutAnim.start()
+        else:
+            self.deleteLater()
+        if self.controller:
+            self.controller.is_modal_active = False
+
+
+class ConfirmActionOverlay(QWidget):
+    """Reusable modal overlay for action confirmations"""
+    def __init__(self, parent=None, animator=None, activeFont=None, title="CONFIRMATION", message="", on_confirm=None, controller=None):
+        super().__init__(parent)
+        self.animator = animator
+        self.activeFont = activeFont if activeFont else "Arial"
+        self.on_confirm = on_confirm
+        self.controller = controller
+        self.theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+
+        self.is_submitting = False
+        
+        self.effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.effect)
+        self.effect.setOpacity(0.0)
+
+        if self.parent():
+            self.setGeometry(self.parent().rect())
+            self.parent().installEventFilter(self)
+
+        # BG Mask
+        self.backdrop = QWidget(self)
+        self.backdrop.setGeometry(self.rect())
+        self.backdrop.setStyleSheet("background-color: rgba(0, 0, 0, 128);")
+
+        # Main Dialog Box
+        self.dialogBox = QWidget(self)
+        self.dialogBox.setFixedSize(500, 260)
+        self.updateDialogPosition()
+        self.dialogBox.setStyleSheet(
+            "QWidget {"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.project_bg.hex1}, stop:1 {self.theme.project_bg.hex2});"
+            f"    border: 4px solid {self.theme.project_border};"
+            f"    border-radius: 20px;"
+            "}"
+        )
+
+        dialogLayout = QVBoxLayout(self.dialogBox)
+        dialogLayout.setContentsMargins(25, 25, 25, 25)
+        dialogLayout.setSpacing(15)
+
+        label_font = QFont(self.activeFont, 13, QFont.Weight.Bold)
+
+        # Title Label
+        titleLabel = QLabel(title)
+        titleLabel.setFont(label_font)
+        titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        titleLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        dialogLayout.addWidget(titleLabel)
+
+        # Message Label
+        msgLabel = QLabel(message)
+        msgLabel.setFont(QFont(self.activeFont, 11, QFont.Weight.Normal))
+        msgLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        msgLabel.setWordWrap(True)
+        msgLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        dialogLayout.addWidget(msgLabel, 1)
+
+        # Buttons Layout
+        bottomBtnLayout = QHBoxLayout()
+        bottomBtnLayout.setSpacing(20)
+        
+        self.btnConfirm = QPushButton("CONFIRM")
+        self.btnConfirm.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
+        self.btnConfirm.setFixedHeight(40)
+        self.btnConfirm.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_negativebutton_bg.hex1}, stop:0.8 {self.theme.core_negativebutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_negativebutton_border}; border-radius: 18px;"
+        )
+        self.btnConfirm.clicked.connect(self.acceptOverlay)
+
+        self.btnCancel = QPushButton("CANCEL")
+        self.btnCancel.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
+        self.btnCancel.setFixedHeight(40)
+        self.btnCancel.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_neutralbutton_bg.hex1}, stop:0.8 {self.theme.core_neutralbutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_neutralbutton_border}; border-radius: 18px;"
+        )
+        self.btnCancel.clicked.connect(self.rejectOverlay)
+
+        bottomBtnLayout.addWidget(self.btnConfirm)
+        bottomBtnLayout.addWidget(self.btnCancel)
+        dialogLayout.addLayout(bottomBtnLayout)
+
+        self.show()
+        self.fadeInAnim = self.animator.createAnimation(self, "opacity", 0.0, 1.0, duration=300)
+        if self.fadeInAnim:
+            self.fadeInAnim.start()
+
+    def updateDialogPosition(self):
+        parent_rect = self.parent().rect() if self.parent() else self.rect()
+        box_x = (parent_rect.width() - self.dialogBox.width()) // 2
+        box_y = (parent_rect.height() - self.dialogBox.height()) // 2
+        self.dialogBox.move(box_x, box_y)
+
+    def eventFilter(self, obj, event):
+        if obj == self.parent() and event.type() == QEvent.Type.Resize:
+            self.setGeometry(self.parent().rect())
+            self.backdrop.setGeometry(self.rect())
+            self.updateDialogPosition()
+        return super().eventFilter(obj, event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.parent():
+            self.setGeometry(self.parent().rect())
+        self.backdrop.setGeometry(self.rect())
+        self.updateDialogPosition()
+
+    def acceptOverlay(self):
+        if self.is_submitting:
+            return
+        self.is_submitting = True
+        if self.on_confirm:
+            self.on_confirm()
         self.closeOverlay()
 
     def rejectOverlay(self):
@@ -301,7 +561,7 @@ class ProjectDetailPage(QWidget):
             
             tName = QLabel(t["name"])
             tName.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
-            tName.setStyleSheet("color: #ffa500; border: none; background: transparent;") # TODO: Figure out where in Themes to bind this colour
+            tName.setStyleSheet("color: #ffa500; border: none; background: transparent;")
             tbLayout.addWidget(tName)
 
             for sub in t["subs"]:
@@ -329,10 +589,20 @@ class ProjectDetailPage(QWidget):
         self.btnBack.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
         self.btnBack.setFixedHeight(45)
         self.btnBack.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_negativebutton_bg.hex1}, stop:1 {self.theme.core_negativebutton_bg.hex2});"
-            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_negativebutton_border}; border-radius: 18px;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_neutralbutton_bg.hex1}, stop:1 {self.theme.core_neutralbutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_neutralbutton_border}; border-radius: 18px;"
         )
         self.btnBack.clicked.connect(self.controller.returnToProjects)
+
+        self.btnArchive = QPushButton("ARCHIVE PROJECT")
+        self.btnArchive.setObjectName("archiveProject")
+        self.btnArchive.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
+        self.btnArchive.setFixedHeight(45)
+        self.btnArchive.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_neutralbutton_bg.hex1}, stop:1 {self.theme.core_neutralbutton_bg.hex2});"
+            f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_neutralbutton_border}; border-radius: 18px;"
+        )
+        self.btnArchive.clicked.connect(self.archiveProjectPrompt)
 
         self.btnDelete = QPushButton("DELETE PROJECT")
         self.btnDelete.setObjectName("deleteProject")
@@ -342,10 +612,52 @@ class ProjectDetailPage(QWidget):
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_negativebutton_bg.hex1}, stop:1 {self.theme.core_negativebutton_bg.hex2});"
             f"color: {self.theme.core_widgets_btntext}; border: 3px solid {self.theme.core_negativebutton_border}; border-radius: 18px;"
         )
-        self.btnDelete.clicked.connect(self.controller.returnToProjects)
+        self.btnDelete.clicked.connect(self.deleteProjectPrompt)
 
         btnContainerLayout.addWidget(self.btnBack)
+        btnContainerLayout.addWidget(self.btnArchive)
         btnContainerLayout.addWidget(self.btnDelete)
+
+    def archiveProjectPrompt(self):
+        self.controller.is_modal_active = True
+        ConfirmActionOverlay(
+            parent=self.controller.stackedWidget,
+            animator=self.controller.animator,
+            activeFont=self.activeFont,
+            title="ARCHIVE PROJECT",
+            message=f"Are you sure you want to archive '{self.project.name}'?\nIt will be hidden from your active project list.",
+            on_confirm=self.performArchive,
+            controller=self.controller
+        )
+
+    def performArchive(self):
+        proj_id = self.project.projectID
+        all_projects = load_projects_from_json()
+        for p in all_projects:
+            if p.projectID == proj_id:
+                p.is_archived = True
+                break
+        save_projects_to_json(all_projects)
+        self.controller.returnToProjects()
+
+    def deleteProjectPrompt(self):
+        self.controller.is_modal_active = True
+        ConfirmActionOverlay(
+            parent=self.controller.stackedWidget,
+            animator=self.controller.animator,
+            activeFont=self.activeFont,
+            title="DELETE PROJECT",
+            message=f"Are you sure you want to delete '{self.project.name}'?\nThis action cannot be undone.",
+            on_confirm=self.performDelete,
+            controller=self.controller
+        )
+
+    def performDelete(self):
+        proj_id = self.project.projectID
+        all_projects = load_projects_from_json()
+        all_projects = [p for p in all_projects if p.projectID != proj_id]
+        save_projects_to_json(all_projects)
+        self.controller.returnToProjects()
 
 
 class ProjectListPage(QWidget):
@@ -357,7 +669,7 @@ class ProjectListPage(QWidget):
         self.activeJetFamFont = self.controller.activeJetFamFont
         self.theme = self.controller.current_theme
         
-        self.saved_projects = DummyList.dummyProjects
+        self.saved_projects = [p for p in load_projects_from_json() if not getattr(p, 'is_archived', False)]
 
         self.mainContentLayout = QVBoxLayout(self)
         self.mainContentLayout.setObjectName("mainContentLayout")
@@ -405,7 +717,10 @@ class ProjectListPage(QWidget):
         self.topActionBarLayout.addWidget(self.btnArchived)
 
         self.gridContainerWidget = QWidget(self)
-        self.gridContainerWidget.setStyleSheet("background-color: rgba(30, 30, 30, 0.90); border: 4px solid black; border-radius: 20px;")
+        self.gridContainerWidget.setStyleSheet(
+            f"background-color: {self.theme.core_bg_lists if self.theme.core_bg_lists else 'rgba(10, 10, 10, 0.5)'};"
+            f"border: none; border-radius: 20px;"
+        )
         
         gridContainerLayout = QVBoxLayout(self.gridContainerWidget)
         gridContainerLayout.setContentsMargins(8, 8, 8, 8)
@@ -415,11 +730,9 @@ class ProjectListPage(QWidget):
         self.scrollArea.setFrameShape(QFrame.Shape.NoFrame)
         self.scrollArea.setStyleSheet("background: transparent; border: none;")
         
-        # Keep scrollbars always visible occupying dedicated edge tracks
         self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         
-        # Assign Custom Painted Rounded Scrollbars passing controller for theme integration
         v_bar = RoundedScrollBar(Qt.Orientation.Vertical, self.scrollArea, controller=self.controller)
         v_bar.setFixedWidth(16)
         h_bar = RoundedScrollBar(Qt.Orientation.Horizontal, self.scrollArea, controller=self.controller)
@@ -432,6 +745,7 @@ class ProjectListPage(QWidget):
         self.scrollContentWidget.setStyleSheet("background: transparent; border: none;")
         self.projectsGrid = QGridLayout(self.scrollContentWidget)
         self.projectsGrid.setSpacing(15)
+        self.scrollContentWidget.setLayout(self.projectsGrid)
         self.projectsGrid.setContentsMargins(10, 10, 10, 10)
 
         self.scrollArea.setWidget(self.scrollContentWidget)
@@ -441,7 +755,7 @@ class ProjectListPage(QWidget):
         bottomBarLayout.setContentsMargins(5, 0, 5, 0)
 
         self.searchBar = QLineEdit(self)
-        self.searchBar.setPlaceholderText("🔍 SEARCH...") # TODO: replace emoji with proper icon
+        self.searchBar.setPlaceholderText("🔍 SEARCH...")
         self.searchBar.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
         self.searchBar.setFixedHeight(35); self.searchBar.setFixedWidth(280)
         self.searchBar.setStyleSheet(
@@ -460,11 +774,22 @@ class ProjectListPage(QWidget):
 
         self.populateGrid()
 
+    def showEvent(self, event):
+        """Automatically re-updates/repopulates the grid whenever returning to the Project List page."""
+        super().showEvent(event)
+        self.populateGrid()
+
     def populateGrid(self):
         while self.projectsGrid.count():
             item = self.projectsGrid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+        all_projects = load_projects_from_json()
+        for p in all_projects:
+            p.update_elapsed_time()
+        save_projects_to_json(all_projects)
+        self.saved_projects = [p for p in all_projects if not getattr(p, 'is_archived', False)]
 
         max_cols = 4
         for i in range(max_cols):
@@ -540,23 +865,31 @@ class ProjectListPage(QWidget):
             controller=self.controller
         )
 
-    def onNewProjectCreated(self, name, desc):
+    def onNewProjectCreated(self, name, deadline, desc):
+        create_dt = datetime.datetime.now()
+        current_dt = datetime.datetime.now()
+        diff = current_dt - create_dt
+        days = diff.days
+        hours = diff.seconds // 3600
+        minutes = (diff.seconds % 3600) // 60
+        time_elapsed_str = f"{days}d {hours}h {minutes}m"
+
         new_proj = Project(
             projectID=int(time.time()),
             name=name,
             desc=desc if desc else "No description provided.",
-            time_create=datetime.datetime.now().isoformat(),
+            time_create=create_dt.isoformat(),
+            time_elapsed=time_elapsed_str,
             last_update=datetime.datetime.now().isoformat(),
             tasks=[],
             tags=[],
             icon="",
             progress=0.0,
-            deadline="2026-12-31"
+            deadline=deadline if deadline else "No Deadline"
         )
         new_proj.controller_ref = self.controller
-        self.saved_projects.append(new_proj)
         
-        # Persist changes to local JSON storage
-        DummyList.save_projects_to_json(self.saved_projects)
-        
+        all_projects = load_projects_from_json()
+        all_projects.append(new_proj)
+        save_projects_to_json(all_projects)
         self.populateGrid()

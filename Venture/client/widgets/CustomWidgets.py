@@ -35,7 +35,7 @@ class HoverButton(QPushButton):
     def leaveEvent(self, event):
         """Auto-triggers when mouse leaves"""
         if self.animator and self.start_val and self.end_val:
-            # Swap start and end values to reverse the animation
+            # Swap start & end values to reverse the animation
             self.animator.animateOnHover(
                 self, 
                 self.anim_type, 

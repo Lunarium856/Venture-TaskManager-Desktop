@@ -54,13 +54,16 @@ class Animator(QObject):
         if type == "text":
             rule_name = "color"
             def update_style(val):
-                col_str = val.name() if isinstance(val, QColor) else str(val)
-                curr_ss = target.styleSheet() or original_stylesheet
-                if re.search(rf"\b{rule_name}\s*:", curr_ss):
-                    new_ss = re.sub(rf"\b{rule_name}\s*:[^;]+;", f"{rule_name}: {col_str};", curr_ss)
-                else:
-                    new_ss = curr_ss.rstrip(";") + f"; {rule_name}: {col_str};"
-                target.setStyleSheet(new_ss)
+                try:
+                    col_str = val.name() if isinstance(val, QColor) else str(val)
+                    curr_ss = target.styleSheet() or original_stylesheet
+                    if re.search(rf"\b{rule_name}\s*:", curr_ss):
+                        new_ss = re.sub(rf"\b{rule_name}\s*:[^;]+;", f"{rule_name}: {col_str};", curr_ss)
+                    else:
+                        new_ss = curr_ss.rstrip(";") + f"; {rule_name}: {col_str};"
+                    target.setStyleSheet(new_ss)
+                except RuntimeError:
+                    return
             anim.valueChanged.connect(update_style)
 
         elif type == "border":
@@ -70,29 +73,35 @@ class Animator(QObject):
             b_width_style = b_match.group(1) if b_match else "3px solid"
 
             def update_border(val):
-                col_str = val.name() if isinstance(val, QColor) else str(val)
-                new_border_val = f"{b_width_style} {col_str}"
-                curr_ss = target.styleSheet() or original_stylesheet
-                if re.search(rf"\b{rule_name}\s*:", curr_ss):
-                    new_ss = re.sub(rf"\b{rule_name}\s*:[^;]+;", f"{rule_name}: {new_border_val};", curr_ss)
-                else:
-                    new_ss = curr_ss.rstrip(";") + f"; {rule_name}: {new_border_val};"
-                target.setStyleSheet(new_ss)
+                try:
+                    col_str = val.name() if isinstance(val, QColor) else str(val)
+                    new_border_val = f"{b_width_style} {col_str}"
+                    curr_ss = target.styleSheet() or original_stylesheet
+                    if re.search(rf"\b{rule_name}\s*:", curr_ss):
+                        new_ss = re.sub(rf"\b{rule_name}\s*:[^;]+;", f"{rule_name}: {new_border_val};", curr_ss)
+                    else:
+                        new_ss = curr_ss.rstrip(";") + f"; {rule_name}: {new_border_val};"
+                    target.setStyleSheet(new_ss)
+                except RuntimeError:
+                    return
             anim.valueChanged.connect(update_border)
 
         elif type == "background":
             rule_name = "background"
             def update_bg(val):
-                if isinstance(val, QColor):
-                    bg_str = f"rgba({val.red()}, {val.green()}, {val.blue()}, {val.alpha()})"
-                else:
-                    bg_str = str(val)
-                curr_ss = target.styleSheet() or original_stylesheet
-                if re.search(rf"\b{rule_name}\s*:", curr_ss):
-                    new_ss = re.sub(rf"\b{rule_name}\s*:[^;]+;", f"{rule_name}: {bg_str};", curr_ss)
-                else:
-                    new_ss = curr_ss.rstrip(";") + f"; {rule_name}: {bg_str};"
-                target.setStyleSheet(new_ss)
+                try:
+                    if isinstance(val, QColor):
+                        bg_str = f"rgba({val.red()}, {val.green()}, {val.blue()}, {val.alpha()})"
+                    else:
+                        bg_str = str(val)
+                    curr_ss = target.styleSheet() or original_stylesheet
+                    if re.search(rf"\b{rule_name}\s*:", curr_ss):
+                        new_ss = re.sub(rf"\b{rule_name}\s*:[^;]+;", f"{rule_name}: {bg_str};", curr_ss)
+                    else:
+                        new_ss = curr_ss.rstrip(";") + f"; {rule_name}: {bg_str};"
+                    target.setStyleSheet(new_ss)
+                except RuntimeError:
+                    return
             anim.valueChanged.connect(update_bg)
 
         elif type == "icon":
@@ -106,19 +115,22 @@ class Animator(QObject):
                     target._original_icon_size = size
 
                 def update_btn_icon_color(color: QColor):
-                    if not hasattr(target, '_original_pixmap'):
+                    try:
+                        if not hasattr(target, '_original_pixmap'):
+                            return
+                        temp_pixmap = target._original_pixmap
+                        colored_pixmap = QPixmap(temp_pixmap.size())
+                        colored_pixmap.fill(Qt.GlobalColor.transparent)
+                        painter = QPainter(colored_pixmap)
+                        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+                        painter.drawPixmap(0, 0, temp_pixmap)
+                        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                        painter.fillRect(colored_pixmap.rect(), color)
+                        painter.end()
+                        
+                        target.setIcon(QIcon(colored_pixmap))
+                    except RuntimeError:
                         return
-                    temp_pixmap = target._original_pixmap
-                    colored_pixmap = QPixmap(temp_pixmap.size())
-                    colored_pixmap.fill(Qt.GlobalColor.transparent)
-                    painter = QPainter(colored_pixmap)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-                    painter.drawPixmap(0, 0, temp_pixmap)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-                    painter.fillRect(colored_pixmap.rect(), color)
-                    painter.end()
-                    
-                    target.setIcon(QIcon(colored_pixmap))
 
                 anim.valueChanged.connect(update_btn_icon_color)
 
@@ -130,19 +142,22 @@ class Animator(QObject):
                     target._original_icon_size = target.pixmap().size()
 
                 def update_icon_color(color: QColor):
-                    if not hasattr(target, '_original_pixmap'):
+                    try:
+                        if not hasattr(target, '_original_pixmap'):
+                            return
+                        temp_pixmap = target._original_pixmap
+                        colored_pixmap = QPixmap(temp_pixmap.size())
+                        colored_pixmap.fill(Qt.GlobalColor.transparent)
+                        painter = QPainter(colored_pixmap)
+                        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+                        painter.drawPixmap(0, 0, temp_pixmap)
+                        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                        painter.fillRect(colored_pixmap.rect(), color)
+                        painter.end()
+                        
+                        target.setPixmap(colored_pixmap)
+                    except RuntimeError:
                         return
-                    temp_pixmap = target._original_pixmap
-                    colored_pixmap = QPixmap(temp_pixmap.size())
-                    colored_pixmap.fill(Qt.GlobalColor.transparent)
-                    painter = QPainter(colored_pixmap)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-                    painter.drawPixmap(0, 0, temp_pixmap)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-                    painter.fillRect(colored_pixmap.rect(), color)
-                    painter.end()
-                    
-                    target.setPixmap(colored_pixmap)
 
                 anim.valueChanged.connect(update_icon_color)
         return anim

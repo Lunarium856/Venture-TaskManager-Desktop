@@ -1,248 +1,86 @@
 [
     {
-        "projectID": 1234,
-        "name": "Venture Testing",
-        "desc": "Dummy Info",
-        "time_create": "2026-11-09T16:06:03.050413",
-        "last_update": "2026-11-09T16:06:03.050413",
-        "tasks": [],
-        "tags": [
-            {
-                "tagID": 987,
-                "name": "Trial",
-                "desc": " ",
-                "colour": "ff0000"
-            },
-            {
-                "tagID": 986,
-                "name": "Issue",
-                "desc": " ",
-                "colour": "00ff00"
-            },
-            {
-                "tagID": 985,
-                "name": "To-do",
-                "desc": " ",
-                "colour": "0000ff"
-            }
-        ],
-        "icon": "icon_sidebar_main.png",
-        "progress": 75,
-        "deadline": "2025-12-31"
-    },
-    {
-        "projectID": 2345,
-        "name": "Still Testing",
-        "desc": "The quick brown dog jumped over the lazy dog.",
-        "time_create": "2026-11-09T16:06:03.050413",
-        "last_update": "2026-11-09T16:06:03.050413",
-        "tasks": [],
-        "tags": [
-            {
-                "tagID": 987,
-                "name": "Trial",
-                "desc": " ",
-                "colour": "ff0000"
-            },
-            {
-                "tagID": 986,
-                "name": "Issue",
-                "desc": " ",
-                "colour": "00ff00"
-            },
-            {
-                "tagID": 985,
-                "name": "To-do",
-                "desc": " ",
-                "colour": "0000ff"
-            }
-        ],
-        "icon": "icon_sidebar_settings.png",
-        "progress": 37,
-        "deadline": "2025-12-31"
-    },
-    {
-        "projectID": 3456,
-        "name": "Even More Testing",
-        "desc": "It was me, Barry! I reversed the text in the previous entry to throw you for a loop.",
-        "time_create": "2026-11-09T16:06:03.050413",
-        "last_update": "2026-11-09T16:06:03.050413",
-        "tasks": [],
-        "tags": [
-            {
-                "tagID": 987,
-                "name": "Trial",
-                "desc": " ",
-                "colour": "ff0000"
-            },
-            {
-                "tagID": 986,
-                "name": "Issue",
-                "desc": " ",
-                "colour": "00ff00"
-            },
-            {
-                "tagID": 985,
-                "name": "To-do",
-                "desc": " ",
-                "colour": "0000ff"
-            }
-        ],
-        "icon": "icon_sidebar_tags.png",
-        "progress": 75,
-        "deadline": "2025-12-31"
-    },
-    {
-        "projectID": 4567,
-        "name": "Fix this app",
-        "desc": "Dummy Info",
-        "time_create": "2026-11-09T16:06:03.050413",
-        "last_update": "2026-11-09T16:06:03.050413",
-        "tasks": [],
-        "tags": [
-            {
-                "tagID": 987,
-                "name": "Trial",
-                "desc": " ",
-                "colour": "ff0000"
-            },
-            {
-                "tagID": 986,
-                "name": "Issue",
-                "desc": " ",
-                "colour": "00ff00"
-            },
-            {
-                "tagID": 985,
-                "name": "To-do",
-                "desc": " ",
-                "colour": "0000ff"
-            }
-        ],
-        "icon": "icon_sidebar_main.png",
-        "progress": 75,
-        "deadline": "2025-12-31"
-    },
-    {
-        "projectID": 5678,
-        "name": "Just do it",
-        "desc": "The quick brown dog jumped over the lazy dog.",
-        "time_create": "2026-11-09T16:06:03.050413",
-        "last_update": "2026-11-09T16:06:03.050413",
-        "tasks": [],
-        "tags": [
-            {
-                "tagID": 987,
-                "name": "Trial",
-                "desc": " ",
-                "colour": "ff0000"
-            },
-            {
-                "tagID": 986,
-                "name": "Issue",
-                "desc": " ",
-                "colour": "00ff00"
-            },
-            {
-                "tagID": 985,
-                "name": "To-do",
-                "desc": " ",
-                "colour": "0000ff"
-            }
-        ],
-        "icon": "icon_sidebar_settings.png",
-        "progress": 37,
-        "deadline": "2025-12-31"
-    },
-    {
-        "projectID": 6789,
-        "name": "Crazy? I was crazy once. They locked me in a room. A rubber room! A rubber room with rats, and rats make me crazy.",
-        "desc": "Crazy? I was crazy once. They locked me in a room. A rubber room! A rubber room with rats, and rats make me crazy. Crazy? I was crazy once. They locked me in a room. A rubber room! A rubber room with rats, and rats make me crazy. Crazy? I was crazy once. They locked me in a room. A rubber room! A rubber room with rats, and rats make me crazy. Crazy? I was crazy once. They locked me in a room. A rubber room! A rubber room with rats, and rats make me crazy. Crazy? I was crazy once. They locked me in a room. A rubber room! A rubber room with rats, and rats make me crazy. Crazy? I was crazy once.",
-        "time_create": "2026-11-09T16:06:03.050413",
-        "last_update": "2026-11-09T16:06:03.050413",
-        "tasks": [],
-        "tags": [
-            {
-                "tagID": 987,
-                "name": "Trial",
-                "desc": " ",
-                "colour": "ff0000"
-            },
-            {
-                "tagID": 986,
-                "name": "Issue",
-                "desc": " ",
-                "colour": "00ff00"
-            },
-            {
-                "tagID": 985,
-                "name": "To-do",
-                "desc": " ",
-                "colour": "0000ff"
-            }
-        ],
-        "icon": "icon_sidebar_tags.png",
-        "progress": 75,
-        "deadline": "2025-12-31"
-    },
-    {
         "projectID": 1794213550,
         "name": "Test",
         "desc": "Fix monitor",
-        "time_create": "2026-11-09T16:39:10.805700",
+        "time_create": "2026-11-10T19:41:14.345371",
+        "time_elapsed": "0d 3h 49m",
         "last_update": "2026-11-09T16:39:10.805709",
         "tasks": [],
         "tags": [],
-        "icon": "",
+        "icon": "c:\\Coding\\Mixed\\Venture-TaskManager-Desktop\\Venture\\assets\\icons\\core\\icon_settings_anim.png",
         "progress": 0.0,
-        "deadline": "2026-12-31"
-    },
-    {
-        "projectID": 1794232820,
-        "name": "Trying something",
-        "desc": "Make Pepper Eat her dinner",
-        "time_create": "2026-11-09T22:00:20.784359",
-        "last_update": "2026-11-09T22:00:20.784374",
-        "tasks": [],
-        "tags": [],
-        "icon": "",
-        "progress": 0.0,
-        "deadline": "2026-12-31"
+        "deadline": "2026-12-31",
+        "is_archived": false
     },
     {
         "projectID": 1794233063,
         "name": "Project Sorting Filters",
         "desc": "a button that allows you to sort projects by date, alphabetically, or by other relevant data points",
-        "time_create": "2026-11-09T22:04:23.651029",
+        "time_create": "2026-11-10T19:41:14.346708",
+        "time_elapsed": "0d 3h 49m",
         "last_update": "2026-11-09T22:04:23.651039",
         "tasks": [],
         "tags": [],
-        "icon": "",
+        "icon": "c:\\Coding\\Mixed\\Venture-TaskManager-Desktop\\Venture\\assets\\icons\\core\\icon_settings_anim.png",
         "progress": 0.0,
-        "deadline": "2026-12-31"
+        "deadline": "2026-12-31",
+        "is_archived": false
     },
     {
         "projectID": 1794233175,
         "name": "NEW PROJECT prompt",
         "desc": "All functionality to being able to create a new project, including setting a deadline, icon, & tags. Remove the \"tasks\" field.",
-        "time_create": "2026-11-09T22:06:15.583272",
+        "time_create": "2026-11-10T19:41:14.347301",
+        "time_elapsed": "0d 3h 49m",
         "last_update": "2026-11-09T22:06:15.583299",
         "tasks": [],
         "tags": [],
-        "icon": "",
+        "icon": "c:\\Coding\\Mixed\\Venture-TaskManager-Desktop\\Venture\\assets\\icons\\core\\icon_settings_anim.png",
         "progress": 0.0,
-        "deadline": "2026-12-31"
+        "deadline": "2026-12-31",
+        "is_archived": false
     },
     {
         "projectID": 1794238807,
         "name": "Idempotency Check",
         "desc": "Trial",
-        "time_create": "2026-11-09T23:40:07.822972",
+        "time_create": "2026-11-10T19:41:14.348216",
+        "time_elapsed": "0d 3h 49m",
         "last_update": "2026-11-09T23:40:07.822991",
         "tasks": [],
         "tags": [],
-        "icon": "",
+        "icon": "c:\\Coding\\Mixed\\Venture-TaskManager-Desktop\\Venture\\assets\\icons\\core\\icon_settings_anim.png",
         "progress": 0.0,
-        "deadline": "2026-12-31"
+        "deadline": "2026-12-31",
+        "is_archived": false
+    },
+    {
+        "projectID": 1794288472,
+        "name": "Deletion testing",
+        "desc": "No description provided.",
+        "time_create": "2026-11-10T19:41:14.348434",
+        "time_elapsed": "0d 3h 49m",
+        "last_update": "2026-11-10T13:27:52.158149",
+        "tasks": [],
+        "tags": [],
+        "icon": "c:\\Coding\\Mixed\\Venture-TaskManager-Desktop\\Venture\\assets\\icons\\core\\icon_settings_anim.png",
+        "progress": 0.0,
+        "deadline": "13/11/2026",
+        "is_archived": false
+    },
+    {
+        "projectID": 1794305142,
+        "name": "Default Icon test",
+        "desc": "UAWYgdiawkdlw kmA Dlaimd a",
+        "time_create": "2026-11-10T19:41:14.348434",
+        "time_elapsed": "0d 3h 49m",
+        "last_update": "2026-11-10T18:05:42.613448",
+        "tasks": [],
+        "tags": [],
+        "icon": "c:\\Coding\\Mixed\\Venture-TaskManager-Desktop\\Venture\\assets\\icons\\core\\icon_settings_anim.png",
+        "progress": 0.0,
+        "deadline": "26/11/2026",
+        "is_archived": false
     }
 ]

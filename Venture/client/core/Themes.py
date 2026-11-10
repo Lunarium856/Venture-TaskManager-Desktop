@@ -13,9 +13,14 @@ class Theme:
     core_bg_main: GradientColourLayer
     core_bg_side: GradientColourLayer
     core_bg_widgets: GradientColourLayer
+    core_bg_lists: str
     core_widgets_gentext: str
     core_widgets_btntext: str
     core_widgets_border: str
+
+    core_neutralbutton_bg: GradientColourLayer
+    core_neutralbutton_border: str
+    core_neutralbutton_border_hover: str
 
     core_positivebutton_bg: GradientColourLayer
     core_positivebutton_border: str
@@ -52,14 +57,19 @@ class Theme:
 THEME_DEFAULT = Theme(
     name="Venture",
 
-    core_bg_main=GradientColourLayer("#3e3e3e", "#1e1e1e"),
-    core_bg_side=GradientColourLayer("#313131", "#1f1f1f"),
+    core_bg_main=GradientColourLayer("#3e3e3e", "#252525"),
+    core_bg_side=GradientColourLayer("#222433", "#15102E"),
     core_bg_widgets=GradientColourLayer("#181818", "#252525"),
+    core_bg_lists="", # default theme & behaviours render a semi-transparent black box (10, 10, 10, 0.5).
     core_widgets_gentext="#ffffff",
     core_widgets_btntext="#ffffff",
     core_widgets_border="#000000",
 
-    core_positivebutton_bg=GradientColourLayer("#00a0bd", "#35ffbc"),
+    core_neutralbutton_bg=GradientColourLayer("#444444", "#353535"),
+    core_neutralbutton_border="#000000",
+    core_neutralbutton_border_hover="#ffffff",
+
+    core_positivebutton_bg=GradientColourLayer("#00a0bd", "#23f3d7"),
     core_positivebutton_border="#000000",
     core_positivebutton_border_hover="#ffffff",
 
@@ -71,7 +81,7 @@ THEME_DEFAULT = Theme(
     sidebar_neutralbtn_bg="transparent",
     sidebar_neutralbtn_border="#1e1e1e",
     sidebar_highlightedbtn="#ffffff",
-    sidebar_highlightedbtn_bg="#1e1e1e",
+    sidebar_highlightedbtn_bg="#13151F",
     sidebar_highlightedbtn_border="#444444",
     sidebar_activebtn="#23f3d7",
 
@@ -84,7 +94,7 @@ THEME_DEFAULT = Theme(
     project_text="#ffffff",
     project_border="#000000",
     project_border_hover="#23f3d7",
-    project_progress=GradientColourLayer("#00a0bd", "#35ffbc")
+    project_progress=GradientColourLayer("#00a0bd", "#23f3d7")
 )
 
 

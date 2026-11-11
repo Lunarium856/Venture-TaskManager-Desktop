@@ -4,4 +4,6 @@ __pycache__/
 
 client/data/*
 !client/data/.gitkeep
+/Venture/client/data
 .vscode/settings.json
+Venture/client/data/projects.json

@@ -1,28 +1,442 @@
-from PyQt6.QtWidgets import QPushButton, QScrollBar, QStyleOptionSlider, QStyle
-from PyQt6.QtCore import QEvent, Qt, QVariantAnimation
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtWidgets import QWidget, QPushButton, QScrollBar, QStyleOptionSlider, QStyle, QStackedWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QCheckBox
+from PyQt6.QtCore import QEvent, Qt, QVariantAnimation, QParallelAnimationGroup, QPropertyAnimation, QRect, QEasingCurve, QSize, QObject
+from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap, QFont, QIcon, QLinearGradient
 import Themes
+import os, time
+
+def get_resolved_icon_path(icon_str: str) -> str:
+    """Resolves an icon path dynamically, supporting built-in assets in icons/core and custom user files"""
+    if not icon_str:
+        return ""
+    
+    if os.path.exists(icon_str):
+        return icon_str
+    
+    dir_script = os.path.dirname(os.path.abspath(__file__))       # client/widgets
+    client_dir = os.path.dirname(dir_script)                      # client
+    root_dir = os.path.dirname(client_dir)                        # Venture root
+    
+    base_name = os.path.basename(icon_str)
+    
+    core_path = os.path.join(root_dir, "assets", "icons", "core", base_name)
+    if os.path.exists(core_path):
+        return core_path
+        
+    legacy_path = os.path.join(root_dir, "assets", "icons", base_name)
+    if os.path.exists(legacy_path):
+        return legacy_path
+        
+    return ""
+
+def tint_pixmap(pixmap: QPixmap, colour: QColor) -> QPixmap:
+    """Tints a QPixmap with a given QColor using SourceIn composition mode"""
+    if pixmap.isNull():
+        return pixmap
+    result = QPixmap(pixmap.size())
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(result.rect(), colour)
+    painter.end()
+    return result
+
+
+class ProjectCardWidget(QWidget):
+    """Custom widget for Project Cards"""
+    def __init__(self, project_instance, parent=None):
+        super().__init__(parent)
+        self.project_instance = project_instance
+        self.base_max_len_name = getattr(project_instance, 'maxLenName', 25)
+        self.base_max_len_desc = getattr(project_instance, 'maxLenDesc', 218)
+        self.max_observed_width_name = None
+        self.max_observed_width_desc = None
+        self.nameLabel = None
+        self.descLabel = None
+        
+        self.setObjectName("projectWidget")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(16777215)
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Creates the Project Card's UI elements"""
+        activeFont = self.project_instance.controller_ref.activeJetFamFont if (self.project_instance.controller_ref and hasattr(self.project_instance.controller_ref, 'activeJetFamFont')) else "Arial"
+        theme = self.project_instance.controller_ref.current_theme if (self.project_instance.controller_ref and hasattr(self.project_instance.controller_ref, 'current_theme')) else Themes.THEME_DEFAULT
+
+        widgetLayout = QVBoxLayout(self)
+        widgetLayout.setContentsMargins(0, 0, 0, 0)
+
+        projectContentWidget = QWidget(self)
+        projectContentWidget.setObjectName("projectContentWidget")
+        projectContentWidget.project_instance = self.project_instance
+        projectContentWidget.setMinimumHeight(250)
+        projectContentWidget.setCursor(Qt.CursorShape.PointingHandCursor)
+        projectContentWidget.mousePressEvent = lambda event: self.project_instance.projectClicked()
+
+        widgetLayout.addWidget(projectContentWidget)
+
+        projectContentLayout = QVBoxLayout(projectContentWidget) 
+        projectContentLayout.setContentsMargins(12, 12, 12, 12)
+        projectContentLayout.setSpacing(6)
+        projectContentWidget.setStyleSheet(
+            "QWidget#projectContentWidget {"
+              f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {theme.project_bg.hex1}, stop:0.8 {theme.project_bg.hex2});"
+              f"border: 3px solid {theme.project_border};"
+              "border-radius: 15px;"
+            "}"
+        )
+
+        topHeaderLayout = QHBoxLayout()
+        topHeaderLayout.setSpacing(8)
+
+        iconLabel = QLabel("", projectContentWidget)
+        resolved_icon = get_resolved_icon_path(self.project_instance.icon if self.project_instance.icon else get_resolved_icon_path("icon_settings_anim.png"))
+        if resolved_icon:
+            pixmap = QPixmap(resolved_icon)
+            scaledPM = pixmap.scaled(QSize(32, 32), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            tintedPM = tint_pixmap(scaledPM, QColor(theme.project_text))
+            iconLabel.setPixmap(tintedPM)
+        elif isinstance(self.project_instance.icon, QIcon):
+            pixmap = self.project_instance.icon.pixmap(QSize(32, 32))
+            tintedPM = tint_pixmap(pixmap, QColor(theme.project_text))
+            iconLabel.setPixmap(tintedPM)
+        iconLabel.setStyleSheet("background: transparent; border: none;")
+
+        self.nameLabel = QLabel(self.project_instance.display_name, projectContentWidget)
+        self.nameLabel.setFont(QFont(activeFont, 14, QFont.Weight.Bold))
+        self.nameLabel.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
+
+        self.descLabel = QLabel(self.project_instance.display_desc, projectContentWidget)
+        self.descLabel.setFont(QFont(activeFont, 10))
+        self.descLabel.setWordWrap(True)
+        self.descLabel.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
+
+        topHeaderLayout.addWidget(iconLabel)
+        topHeaderLayout.addWidget(self.nameLabel, 1)
+
+        # Status row, contains status badge & elapsed time
+        statusRowWidget = QWidget(self)
+        if self.project_instance.status.value == 1:
+            statusRowColour = [QColor(theme.core_negativebutton_bg.hex1), QColor(theme.core_negativebutton_bg.hex2)]
+        elif self.project_instance.status.value == 2:
+            statusRowColour = [QColor(theme.core_positivebutton_bg.hex1), QColor(theme.core_positivebutton_bg.hex2)]
+        else:
+            statusRowColour = [QColor(theme.core_bg_side.hex1), QColor(theme.core_bg_side.hex2)]
+        statusRowWidget.setStyleSheet(
+            f"background-color: rgba({statusRowColour[0].red()},{statusRowColour[0].green()},{statusRowColour[0].blue()},0.25);"
+            f"border: none; border-radius: 8px; padding: 0px;"
+        )
+        
+        statusBadge = QLabel(self.project_instance.status.name, statusRowWidget)
+        statusBadge.setFont(QFont(activeFont, 10, QFont.Weight.Bold))
+        statusBadge.setStyleSheet(
+            f"color: {theme.core_widgets_gentext};"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0.2 {statusRowColour[0].name()}, stop:0.9 {statusRowColour[1].name()});"
+            f"border: 2px solid {theme.core_widgets_border};"
+            f"border-radius: 8px; padding: 2px;"
+        )
+        
+        elapsed_time_label = QLabel(self.project_instance.time_elapsed, statusRowWidget)
+        elapsed_time_label.setFont(QFont(activeFont, 10, QFont.Weight.Bold))
+        elapsed_time_label.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none; padding: 2px;")
+
+        statusRowLayout = QHBoxLayout(statusRowWidget)
+        statusRowLayout.setContentsMargins(0, 0, 0, 0)
+        statusRowLayout.setSpacing(6)
+        statusRowLayout.addWidget(statusBadge)
+        statusRowLayout.addStretch()
+        statusRowLayout.addWidget(elapsed_time_label)
+
+        progBarLayout = QHBoxLayout()
+        progBar = QProgressBar(projectContentWidget)
+        progBar.setRange(0, 100)
+        try:
+            safe_progress = int(self.project_instance.progress)
+        except (ValueError, TypeError):
+            safe_progress = 0
+        progBar.setValue(safe_progress)
+        progBar.setTextVisible(False)
+        progBar.setFixedHeight(10)
+        progBar.setStyleSheet(
+            "QProgressBar {"
+                f"border: 2px solid {theme.core_widgets_border}; border-radius: 5px; background-color: {theme.core_widgets_border};"
+                "}"
+            "QProgressBar::chunk { "
+                f"background: qlineargradient(x1:0, y:0.5, x2:1, y2:0.5, stop:0.2 {theme.project_progress.hex1}, stop:0.9 {theme.project_progress.hex2});"
+            "   border-radius: 3px; }"
+        )
+
+        progValue = QLabel(f"{int(progBar.value())}%", projectContentWidget)
+        progValue.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
+        progValue.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
+
+        progBarLayout.addWidget(progBar, 1)
+        progBarLayout.addWidget(progValue)
+
+        projectContentLayout.addLayout(topHeaderLayout)
+        projectContentLayout.addWidget(self.descLabel)
+        projectContentLayout.addStretch()
+        projectContentLayout.addWidget(statusRowWidget)
+        projectContentLayout.addLayout(progBarLayout)
+
+        self.contentWidget = projectContentWidget
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        current_width = self.width()
+        if current_width <= 0:
+            return
+
+        baseline_width = 500 # base card width
+        diff = max(0, baseline_width - current_width)
+        
+        # Reduce lengths every time the card gets 20 pixels narrower
+        steps = diff // 20
+        new_len_name = max(4, self.base_max_len_name - steps)       #  -1 length per step
+        new_len_desc = max(4, self.base_max_len_desc - steps*10)    # -10 length per step
+        
+        name = self.project_instance.name
+        desc = self.project_instance.desc
+        new_displayname = name if len(name) <= new_len_name else name[:new_len_name] + "..."
+        new_displaydesc = desc if len(desc) <= new_len_desc else desc[:new_len_desc] + "..."
+        
+        if self.project_instance.display_name != new_displayname or self.project_instance.maxLenName != new_len_name:
+            self.project_instance.display_name = new_displayname
+            self.project_instance.maxLenName = new_len_name
+            if self.nameLabel:
+                self.nameLabel.setText(new_displayname)
+
+        if self.project_instance.display_desc != new_displaydesc or self.project_instance.maxLenDesc != new_len_desc:
+            self.project_instance.display_desc = new_displaydesc
+            self.project_instance.maxLenDesc = new_len_desc
+            if self.descLabel:
+                self.descLabel.setText(new_displaydesc)
+
+
+class TaskCardWidget(QWidget):
+    """Custom widget for Task Cards"""
+    def __init__(self, task_instance, parent=None, on_update_callback=None):
+        super().__init__(parent)
+        self.task_instance = task_instance
+        self.on_update_callback = on_update_callback
+        self.setup_ui()
+
+    def setup_ui(self):
+        controller = getattr(self.task_instance, 'controller_ref', None)
+        activeFont = controller.activeJetFamFont if controller and hasattr(controller, 'activeJetFamFont') else "Arial"
+        theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 12, 15, 12)
+        layout.setSpacing(6)
+
+        self.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {theme.project_bg.hex1}, stop:1 {theme.project_bg.hex2});"
+            f"border: 3px solid {theme.project_border}; border-radius: 15px;"
+        )
+
+        topRow = QHBoxLayout()
+        topRow.setSpacing(10)
+
+        has_subtasks = bool(self.task_instance.subtasks)
+        if not has_subtasks:
+            self.checkbox = QCheckBox(self.task_instance.name)
+            self.checkbox.setChecked(bool(self.task_instance.status))
+            self.checkbox.setFont(QFont(activeFont, 14, QFont.Weight.Bold))
+            self.checkbox.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
+            self.checkbox.stateChanged.connect(self.onCheckboxChanged)
+            topRow.addWidget(self.checkbox, 1)
+        else:
+            nameLbl = QLabel(self.task_instance.name)
+            nameLbl.setFont(QFont(activeFont, 14, QFont.Weight.Bold))
+            nameLbl.setStyleSheet("color: #ffa500; border: none; background: transparent;")
+            topRow.addWidget(nameLbl, 1)
+
+            pct_val = int(getattr(self.task_instance, 'progress', 0.0))
+            pctLbl = QLabel(f"{pct_val}%")
+            pctLbl.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
+            pctLbl.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
+            topRow.addWidget(pctLbl)
+
+        animator = getattr(controller, 'animator', None)
+        
+        # New Subtask button
+        btnPlus = HoverButton("+", parent=self, animator=animator)
+        btnPlus.setFixedSize(32, 32)
+        btnPlus.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
+        btnPlus.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {theme.core_positivebutton_bg.hex1}, stop:0.8 {theme.core_positivebutton_bg.hex2});"
+            f"color: {theme.core_widgets_btntext}; border: 2px solid {theme.core_positivebutton_border}; border-radius: 8px;"
+        )
+        btnPlus.setHoverData(["border"], [theme.core_positivebutton_border], [theme.core_positivebutton_border_hover])
+        btnPlus.clicked.connect(self.createSubtaskPrompt)
+        topRow.addWidget(btnPlus)
+
+        # Edit button
+        btnEdit = HoverButton("", parent=self, animator=animator)
+        btnEdit.setFixedSize(32, 32)
+        edit_icon_path = get_resolved_icon_path("icon_project_edit.png")
+        if edit_icon_path and os.path.exists(edit_icon_path):
+            pm = QPixmap(edit_icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            tinted_pm = tint_pixmap(pm, QColor(theme.core_widgets_gentext))
+            btnEdit.setIcon(QIcon(tinted_pm))
+        btnEdit.setStyleSheet(f"background: {theme.scroll_track}; border: 2px solid {theme.core_widgets_border}; border-radius: 8px;")
+        btnEdit.setHoverData(["border"], [theme.core_widgets_border], [theme.core_positivebutton_border])
+        btnEdit.clicked.connect(self.editTaskPrompt)
+        topRow.addWidget(btnEdit)
+
+        # Delete button
+        btnDelete = HoverButton("", parent=self, animator=animator)
+        btnDelete.setFixedSize(32, 32)
+        delete_icon_path = get_resolved_icon_path("icon_project_delete.png")
+        if delete_icon_path and os.path.exists(delete_icon_path):
+            pm = QPixmap(delete_icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            tinted_pm = tint_pixmap(pm, QColor(theme.core_negativebutton_border))
+            btnDelete.setIcon(QIcon(tinted_pm))
+        btnDelete.setStyleSheet(f"background: {theme.scroll_track}; border: 2px solid {theme.core_widgets_border}; border-radius: 8px;")
+        btnDelete.setHoverData(["border"], [theme.core_widgets_border], [theme.core_negativebutton_border])
+        btnDelete.clicked.connect(self.deleteTaskPrompt)
+        topRow.addWidget(btnDelete)
+
+        layout.addLayout(topRow)
+
+        deadline_str = getattr(self.task_instance, 'deadline', "No Deadline")
+        deadlineLbl = QLabel(f"Deadline: {deadline_str}")
+        deadlineLbl.setFont(QFont(activeFont, 10, QFont.Weight.Light))
+        deadlineLbl.setStyleSheet(f"color: {theme.core_widgets_gentext}; background: transparent; border: none;")
+        layout.addWidget(deadlineLbl)
+
+        if has_subtasks:
+            progBar = QProgressBar()
+            progBar.setRange(0, 100)
+            progBar.setValue(int(getattr(self.task_instance, 'progress', 0.0)))
+            progBar.setTextVisible(False)
+            progBar.setFixedHeight(8)
+            progBar.setStyleSheet(
+                "QProgressBar {"
+                f"border: 2px solid {theme.core_widgets_border}; border-radius: 4px; background-color: {theme.core_widgets_border};"
+                "}"
+                "QProgressBar::chunk { "
+                f"background: qlineargradient(x1:0, y:0.5, x2:1, y2:0.5, stop:0.2 {theme.project_progress.hex1}, stop:0.9 {theme.project_progress.hex2});"
+                "   border-radius: 2px; }"
+            )
+            layout.addWidget(progBar)
+
+            for sub in self.task_instance.subtasks:
+                subBox = QWidget()
+                subBox.setStyleSheet("background: rgba(30,30,30,0.7); border: 2px solid #555; border-radius: 8px;")
+                sbLayout = QHBoxLayout(subBox)
+                sbLayout.setContentsMargins(10, 6, 10, 6)
+                
+                sub_name = sub.get("name", "") if isinstance(sub, dict) else getattr(sub, "name", str(sub))
+                sLbl = QLabel(f"• {sub_name}")
+                sLbl.setFont(QFont(activeFont, 11, QFont.Weight.Normal))
+                sLbl.setStyleSheet("color: white; border: none; background: transparent;")
+                sbLayout.addWidget(sLbl)
+                layout.addWidget(subBox)
+
+    def onCheckboxChanged(self, state):
+        self.task_instance.status = (state == Qt.CheckState.Checked.value or state == 2)
+        if self.on_update_callback:
+            self.on_update_callback()
+
+    def createSubtaskPrompt(self):
+        controller = getattr(self.task_instance, 'controller_ref', None)
+        if not controller:
+            return
+        controller.is_modal_active = True
+        from Menu_ProjectList import CreateTaskOverlay
+        CreateTaskOverlay(
+            parent=controller.stackedWidget,
+            animator=controller.animator,
+            activeFont=controller.activeJetFamFont,
+            title="CREATE SUBTASK",
+            on_create_callback=self.onSubtaskCreated,
+            controller=controller
+        )
+
+    def onSubtaskCreated(self, sub_name, sub_deadline=""):
+        new_sub = {
+            "parentID": self.task_instance.taskID,
+            "subtaskID": int(time.time()),
+            "name": sub_name,
+            "desc": "",
+            "tags": [],
+            "weight": 1,
+            "status": False
+        }
+        if not hasattr(self.task_instance, 'subtasks') or self.task_instance.subtasks is None:
+            self.task_instance.subtasks = []
+        self.task_instance.subtasks.append(new_sub)
+        if self.on_update_callback:
+            self.on_update_callback()
+
+    def editTaskPrompt(self):
+        controller = getattr(self.task_instance, 'controller_ref', None)
+        if not controller:
+            return
+        controller.is_modal_active = True
+        from Menu_ProjectList import EditTaskOverlay
+        EditTaskOverlay(
+            parent=controller.stackedWidget,
+            animator=controller.animator,
+            activeFont=controller.activeJetFamFont,
+            task_instance=self.task_instance,
+            on_save_callback=self.onTaskEdited,
+            controller=controller
+        )
+
+    def onTaskEdited(self, new_name, new_deadline):
+        self.task_instance.name = new_name
+        self.task_instance.deadline = new_deadline
+        if self.on_update_callback:
+            self.on_update_callback()
+
+    def deleteTaskPrompt(self):
+        controller = getattr(self.task_instance, 'controller_ref', None)
+        if not controller:
+            return
+        controller.is_modal_active = True
+        from Menu_ProjectList import ConfirmActionOverlay
+        ConfirmActionOverlay(
+            parent=controller.stackedWidget,
+            animator=controller.animator,
+            activeFont=controller.activeJetFamFont,
+            title="DELETE TASK",
+            message=f"Are you sure you want to delete task '{self.task_instance.name}'?\nThis action cannot be undone.",
+            on_confirm=self.performDelete,
+            controller=controller
+        )
+
+    def performDelete(self):
+        project_ref = getattr(self.task_instance, 'project_ref', None)
+        if project_ref and hasattr(project_ref, 'tasks'):
+            project_ref.tasks = [t for t in project_ref.tasks if (t.taskID if hasattr(t, 'taskID') else t.get("taskID")) != self.task_instance.taskID]
+        if self.on_update_callback:
+            self.on_update_callback()
+
 
 class HoverButton(QPushButton):
+    """Custom Button that supports AnimationHandler's functionalities"""
     def __init__(self, text, parent=None, animator=None):
         super().__init__(text, parent)
         self.animator = animator
-        
-        # Default colors (create settings in Settings.py)
         self.anim_type = ["border"]
         self.start_val = []
         self.end_val = []
 
     def setHoverData(self, anim_type, start_val, end_val):
-        """
-        Store animation details
-        """
+        """Stores animation details"""
         self.anim_type = anim_type
         self.start_val = start_val
         self.end_val = end_val
 
     def enterEvent(self, event):
-        """Auto-triggers when mouse enters"""
         if self.animator and self.start_val and self.end_val:
             self.animator.animateOnHover(
                 self, 
@@ -33,9 +447,7 @@ class HoverButton(QPushButton):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """Auto-triggers when mouse leaves"""
         if self.animator and self.start_val and self.end_val:
-            # Swap start & end values to reverse the animation
             self.animator.animateOnHover(
                 self, 
                 self.anim_type, 
@@ -43,6 +455,37 @@ class HoverButton(QPushButton):
                 self.start_val
             )
         super().leaveEvent(event)
+
+
+class SmoothGradientWidget(QWidget):
+    """Custom widget rendering smooth diagonal gradients to eliminate colour banding"""
+    def __init__(self, hex1, hex2, border_color="black", border_width=4, parent=None):
+        super().__init__(parent)
+        self.c1 = QColor(hex1)
+        self.c2 = QColor(hex2)
+        self.border_color = QColor(border_color)
+        self.border_width = border_width
+        self.setAutoFillBackground(False)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        
+        gradient = QLinearGradient(0, 0, self.width(), self.height())
+        steps = 15
+        for i in range(steps + 1):
+            t = i / steps
+            r = int(self.c1.red() + (self.c2.red() - self.c1.red()) * t)
+            g = int(self.c1.green() + (self.c2.green() - self.c1.green()) * t)
+            b = int(self.c1.blue() + (self.c2.blue() - self.c1.blue()) * t)
+            gradient.setColorAt(t, QColor(r, g, b))
+        
+        painter.fillRect(self.rect(), gradient)
+        
+        if self.border_width > 0:
+            painter.setPen(QPen(self.border_color, self.border_width))
+            right_x = self.width() - (self.border_width // 2)
+            painter.drawLine(right_x, 0, right_x, self.height())
 
 
 class RoundedScrollBar(QScrollBar):
@@ -55,13 +498,12 @@ class RoundedScrollBar(QScrollBar):
         self.handle_color = QColor(f"{theme.scroll_handle}")
         self.setMouseTracking(True)
         
-        # Smooth color fading animation for hover state
         self.color_anim = QVariantAnimation(self)
         self.color_anim.setDuration(200)
         self.color_anim.valueChanged.connect(self._on_color_anim_value)
 
-    def _on_color_anim_value(self, color):
-        self.handle_color = color
+    def _on_color_anim_value(self, colour):
+        self.handle_color = colour
         self.update()
 
     def enterEvent(self, event):
@@ -91,7 +533,6 @@ class RoundedScrollBar(QScrollBar):
         
         theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
         
-        # Draw Custom Rounded Track with active theme colours
         track_rect = self.rect()
         painter.setPen(QPen(QColor(f"{theme.scroll_border}"), 2))
         painter.setBrush(QColor(f"{theme.scroll_track}"))
@@ -103,7 +544,6 @@ class RoundedScrollBar(QScrollBar):
             draw_rect = track_rect.adjusted(10, 1, -10, -1)
             painter.drawRoundedRect(draw_rect, 7, 7)
         
-        # Draw Custom Rounded Handle
         handle_rect = self.style().subControlRect(
             QStyle.ComplexControl.CC_ScrollBar, opt, QStyle.SubControl.SC_ScrollBarSlider, self
         )
@@ -117,3 +557,70 @@ class RoundedScrollBar(QScrollBar):
             else:
                 h_rect = handle_rect.adjusted(2, 2, -2, -2)
                 painter.drawRoundedRect(h_rect, 5, 5)
+
+
+class CustomStackedWidget(QStackedWidget):
+    """Customized QStackedWidget to support card-deck animations"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.move_anim = QParallelAnimationGroup(self)
+        self.is_animating = False
+
+    def animateTransition(self, target_widget, enter_anim=True, duration=300):
+        """Creates & runs the animation for card-deck view switching"""
+        if self.is_animating:
+            return
+        
+        current_widget = self.currentWidget()
+        if current_widget == target_widget:
+            return
+
+        if self.indexOf(target_widget) == -1:
+            self.addWidget(target_widget)
+
+        self.is_animating = True
+        w = self.width()
+        h = self.height()
+
+        target_widget.resize(w, h)
+        if current_widget:
+            current_widget.resize(w, h)
+
+        anim_group = QParallelAnimationGroup(self)
+
+        if enter_anim:
+            target_widget.raise_()
+            target_widget.show()
+            target_widget.setGeometry(-w, 0, w, h)
+
+            anim_in = QPropertyAnimation(target_widget, b"geometry", self)
+            anim_in.setDuration(duration+150)
+            anim_in.setStartValue(QRect(-w, 0, w, h))
+            anim_in.setEndValue(QRect(0, 0, w, h))
+            anim_in.setEasingCurve(QEasingCurve.Type.OutQuint)
+            anim_group.addAnimation(anim_in)
+        else:
+            if current_widget:
+                current_widget.raise_()
+                current_widget.show()
+                target_widget.show()
+                target_widget.setGeometry(0, 0, w, h)
+
+                from Menu_ProjectList import ProjectDetailPage
+                anim_out = QPropertyAnimation(current_widget, b"geometry", self)
+                anim_out.setDuration(duration if not isinstance(target_widget, ProjectDetailPage) else duration-150)
+                anim_out.setStartValue(QRect(0, 0, w, h))
+                anim_out.setEndValue(QRect(-w, 0, w, h))
+                anim_out.setEasingCurve(QEasingCurve.Type.InQuint)
+                anim_group.addAnimation(anim_out)
+
+        def on_finished():
+            self.setCurrentWidget(target_widget)
+            if current_widget:
+                current_widget.setGeometry(0, 0, w, h)
+            target_widget.setGeometry(0, 0, w, h)
+            self.is_animating = False
+
+        anim_group.finished.connect(on_finished)
+        self.move_anim = anim_group
+        anim_group.start()

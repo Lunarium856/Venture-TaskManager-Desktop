@@ -12,15 +12,11 @@ sys.path.append(os.path.join(client_dir, 'data'))
 
 import AnimationHandler, SettingsHandler, Menu_ProjectList, Menu_About, Menu_Archive, Menu_Calendar, Menu_Tags, Menu_Settings, Themes, DummyList
 from ProjectClasses import Project, Task, Subtask, Tag
+from CustomWidgets import CustomStackedWidget
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 import json, time, datetime, sqlite3, ctypes
-
-class CustomStackedWidget(QStackedWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.move_anim = QParallelAnimationGroup(self)
 
 class MainController(QMainWindow):
     def __init__(self):
@@ -101,7 +97,6 @@ class MainController(QMainWindow):
         self.sidebarWidget.setStyleSheet(
             f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.current_theme.core_bg_side.hex1}, stop:1 {self.current_theme.core_bg_side.hex2});"
             "padding: 0px;"
-            "border-left: 4px solid black;"
         )
         self.sidebarWidth = 280
 
@@ -177,7 +172,6 @@ class MainController(QMainWindow):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Enable native Windows dark mode title bar / handle
         if sys.platform == "win32":
             try:
                 hwnd = int(self.winId())
@@ -212,39 +206,80 @@ class MainController(QMainWindow):
         self.stackedWidget.addWidget(self.page_about)
         self.pages["About"] = self.page_about
 
+        # Physical layer hierarchy rank mapping
+        self.page_hierarchy = {
+            self.page_about: 0,            # bottom
+            self.page_settings: 1,
+            self.page_archive: 2,
+            self.page_tags: 3,
+            self.page_calendar: 4,
+            self.page_project_list: 5,     # top
+        }
+
         self.stackedWidget.setCurrentWidget(self.page_project_list)
+
+    def navigateTo(self, target_widget, priority=False):
+        """
+        Switches views with sliding entrance/exit animations based on stack hierarchy ranks or the optional priority flag
+        """
+        if self.stackedWidget.is_animating:
+            return
+        
+        current_widget = self.stackedWidget.currentWidget()
+        if current_widget == target_widget:
+            return
+
+        current_rank = self.page_hierarchy.get(current_widget, 5)
+        is_project_detail = isinstance(target_widget, Menu_ProjectList.ProjectDetailPage)
+        
+        # Priority view is always top of stack (rank 6)
+        target_rank = 6 if (priority or is_project_detail) else self.page_hierarchy.get(target_widget, 5)
+
+        is_leaving_priority = isinstance(current_widget, Menu_ProjectList.ProjectDetailPage)
+
+        if priority or is_project_detail:
+            enter_anim = True
+        elif is_leaving_priority:
+            enter_anim = False
+        else:
+            if target_rank >= current_rank:
+                enter_anim = True
+            else:
+                enter_anim = False
+
+        self.stackedWidget.animateTransition(target_widget, enter_anim=enter_anim)
 
     def goToProjects(self):
         self.updateSidebar(self.sender())
-        self.stackedWidget.setCurrentWidget(self.page_project_list)
+        self.navigateTo(self.page_project_list)
 
     def goToCalendar(self):
         self.updateSidebar(self.sender())
-        self.stackedWidget.setCurrentWidget(self.page_calendar)
+        self.navigateTo(self.page_calendar)
 
     def goToTags(self):
         self.updateSidebar(self.sender())
-        self.stackedWidget.setCurrentWidget(self.page_tags)
+        self.navigateTo(self.page_tags)
 
     def goToArchive(self):
         self.updateSidebar(self.sender())
-        self.stackedWidget.setCurrentWidget(self.page_archive)
+        self.navigateTo(self.page_archive)
 
     def goToSettings(self):
         self.updateSidebar(self.sender())
-        self.stackedWidget.setCurrentWidget(self.page_settings)
+        self.navigateTo(self.page_settings)
 
     def goToAbout(self):
         self.updateSidebar(self.sender())
-        self.stackedWidget.setCurrentWidget(self.page_about)
+        self.navigateTo(self.page_about)
 
     def openProjectDetail(self, project):
         detail_page = Menu_ProjectList.ProjectDetailPage(self, project)
         self.stackedWidget.addWidget(detail_page)
-        self.stackedWidget.setCurrentWidget(detail_page)
+        self.navigateTo(detail_page, priority=True)
 
     def returnToProjects(self):
-        self.stackedWidget.setCurrentWidget(self.page_project_list)
+        self.navigateTo(self.page_project_list)
 
     def deleteProject(self):
         pass
@@ -324,7 +359,7 @@ class MainController(QMainWindow):
         self.animator.createAnimation(button, "icon", QColor(f"{self.current_theme.sidebar_neutralbtn}"), QColor(f"{self.current_theme.sidebar_activebtn}"), duration=1).start()
 
     def eventFilter(self, obj: QObject, event):
-        if self.is_modal_active:
+        if self.is_modal_active or getattr(self.stackedWidget, 'is_animating', False):
             if event.type() in (QEvent.Type.Enter, QEvent.Type.Leave, QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick):
                 return True
             return False

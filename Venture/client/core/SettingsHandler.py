@@ -48,9 +48,7 @@ class Settings:
             print(f"Error saving settings: {e}")
 
     def value(self, key_path, default=None):
-        """
-        Retrieves a value using dot notation or slash notation (e.g., 'theme' or 'window/width').
-        """
+        """Retrieves a value using dot notation or slash notation (e.g., 'theme' or 'window/width')."""
         keys = key_path.replace("\\", "/").split("/")
         val = self.data
         for k in keys:

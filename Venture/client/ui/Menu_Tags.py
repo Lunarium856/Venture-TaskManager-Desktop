@@ -10,10 +10,21 @@ class TagsPage(QWidget):
         super().__init__()
         self.controller = controller
         self.activeFont = self.controller.activeJetFamFont
+        self.theme = self.controller.current_theme
 
-        layout = QVBoxLayout(self)
-        label = QLabel("Tags Management View", self)
+        self.viewContainer = QWidget(self)
+        self.viewContainer.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_bg_main.hex1}, stop:1 {self.theme.core_bg_main.hex2});"
+            f"border-right: 4px solid black;"
+        )
+
+        baseLayout = QVBoxLayout(self)
+        baseLayout.setContentsMargins(0, 0, 0, 0)
+        baseLayout.addWidget(self.viewContainer)
+
+        contentLayout = QVBoxLayout(self.viewContainer)
+        label = QLabel("Tags Management View", self.viewContainer)
         label.setFont(QFont(self.activeFont, 20, QFont.Weight.Bold))
-        label.setStyleSheet("color: white;")
+        label.setStyleSheet("color: white; border: none; background: transparent;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        contentLayout.addWidget(label)

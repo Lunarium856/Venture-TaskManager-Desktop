@@ -156,38 +156,3 @@ def get_theme(name: str) -> Theme:
 # THEME_SUMMER = Theme()
 # THEME_AUTUMN = Theme()
 # THEME_WINTER = Theme()
-
-
-# self.colour_mainBG1 = self.qsettings.value("main/bgcol1", QColor("#7c3aff"), type=QColor)
-# self.colour_mainBG2 = self.qsettings.value("main/bgcol2", QColor("#35709b"), type=QColor)
-
-# self.colour_newProjectBG1 = self.qsettings.value("main/newproject1", QColor("#fdeda6"), type=QColor)
-# self.colour_newProjectBG2 = self.qsettings.value("main/newproject2", QColor("#fff500"), type=QColor)
-# self.colour_newProjectBG1_HL = self.qsettings.value("main/newproject1highlight", QColor("#73e7a7"), type=QColor)
-# self.colour_newProjectBG2_HL = self.qsettings.value("main/newproject2highlight", QColor("#08af40"), type=QColor)
-# self.colour_newProjectText = self.qsettings.value("main/btntext", QColor("black"), type=QColor)
-# self.colour_newProjectText_HL = self.qsettings.value("main/btntexthighlight", QColor("#ececec"), type=QColor)
-
-# self.colour_sidebarBG = self.qsettings.value("sidebar/bgcol", QColor("#c0b8e4"), type=QColor)
-# self.colour_sidebarBtnText = self.qsettings.value("sidebar/btntextcol", QColor("#5c5c5c"), type=QColor)
-# self.colour_sidebarActiveMenu = self.qsettings.value("sidebar/activebtncol", QColor("#f1eeff"), type=QColor)
-# self.colour_sidebarBtn_HL = self.qsettings.value("sidebar/activebtntextcol", QColor("#0086b8"), type=QColor)
-# self.colour_name = self.qsettings.value("sidebar/appname", QColor("#000000"), type=QColor)
-
-# self.colour_noProjectsBG1 = self.qsettings.value("main/noproject1", self.colour_sidebarBG.lighter(140), type=QColor)
-# self.colour_noProjectsBG2 = self.qsettings.value("main/noproject2", self.colour_sidebarBG, type=QColor)
-# self.colour_projectWidgetBG1 = self.qsettings.value("project/projectwidgetbgcol1", QColor("#faf8ff"), type=QColor)
-# self.colour_projectWidgetBG2 = self.qsettings.value("project/projectwidgetbgcol2", QColor("#85ccff"), type=QColor)
-# self.colour_projectWidgetText = self.qsettings.value("project/projectwidgettext", QColor("#000000"), type=QColor)
-# self.colour_projectWidgetBorder = self.qsettings.value("project/projectwidgetborder", QColor("#000000"), type=QColor)
-# self.colour_projectWidget_HL = self.qsettings.value("project/projectwidgethighlight", QColor("#08af40"), type=QColor)
-
-# self.colour_editBtnBG1 = self.qsettings.value("actions/editbtn1", QColor("#ff6c24"), type=QColor)
-# self.colour_editBtnBG2 = self.qsettings.value("actions/editbtn2", QColor("#ffa361"), type=QColor)
-# self.colour_deleteBtnBG1 = self.qsettings.value("actions/deletebtn1", QColor("#dd0202"), type=QColor)
-# self.colour_deleteBtnBG2 = self.qsettings.value("actions/deletebtn2", QColor("#c12659"), type=QColor)
-# self.colour_actionBtnBorder = self.qsettings.value("actions/btnborder", self.colour_projectWidgetBorder, type=QColor)
-# self.colour_actionBtnBorder_HL = self.qsettings.value("actions/btnborderhighlight", self.colour_projectWidget_HL, type=QColor)
-
-# self.colour_projectProgress1 = self.qsettings.value("project/projectprogress1", QColor("#00ff0a"), type=QColor)
-# self.colour_projectProgress2 = self.qsettings.value("project/projectprogress2", QColor("#c2fabf"), type=QColor)

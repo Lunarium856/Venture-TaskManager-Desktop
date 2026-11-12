@@ -669,7 +669,7 @@ class ProjectDetailPage(QWidget):
         self.viewContainer = SmoothGradientWidget(
             self.theme.core_bg_main.hex1,
             self.theme.core_bg_main.hex2,
-            border_color="black",
+            border_colour="black",
             border_width=4,
             parent=self
         )
@@ -987,7 +987,7 @@ class ProjectListPage(QWidget):
         self.viewContainer = SmoothGradientWidget(
             self.theme.core_bg_main.hex1,
             self.theme.core_bg_main.hex2,
-            border_color="black",
+            border_colour="black",
             border_width=4,
             parent=self
         )

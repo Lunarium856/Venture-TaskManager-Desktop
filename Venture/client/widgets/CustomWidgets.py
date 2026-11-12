@@ -459,11 +459,11 @@ class HoverButton(QPushButton):
 
 class SmoothGradientWidget(QWidget):
     """Custom widget rendering smooth diagonal gradients to eliminate colour banding"""
-    def __init__(self, hex1, hex2, border_color="black", border_width=4, parent=None):
+    def __init__(self, hex1, hex2, border_colour="black", border_width=4, parent=None):
         super().__init__(parent)
         self.c1 = QColor(hex1)
         self.c2 = QColor(hex2)
-        self.border_color = QColor(border_color)
+        self.border_colour = QColor(border_colour)
         self.border_width = border_width
         self.setAutoFillBackground(False)
 
@@ -483,7 +483,7 @@ class SmoothGradientWidget(QWidget):
         painter.fillRect(self.rect(), gradient)
         
         if self.border_width > 0:
-            painter.setPen(QPen(self.border_color, self.border_width))
+            painter.setPen(QPen(self.border_colour, self.border_width))
             right_x = self.width() - (self.border_width // 2)
             painter.drawLine(right_x, 0, right_x, self.height())
 
@@ -495,22 +495,22 @@ class RoundedScrollBar(QScrollBar):
         self.controller = controller
         theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
         
-        self.handle_color = QColor(f"{theme.scroll_handle}")
+        self.handle_colour = QColor(f"{theme.scroll_handle}")
         self.setMouseTracking(True)
         
         self.color_anim = QVariantAnimation(self)
         self.color_anim.setDuration(200)
-        self.color_anim.valueChanged.connect(self._on_color_anim_value)
+        self.color_anim.valueChanged.connect(self._on_colour_anim_value)
 
-    def _on_color_anim_value(self, colour):
-        self.handle_color = colour
+    def _on_colour_anim_value(self, colour):
+        self.handle_colour = colour
         self.update()
 
     def enterEvent(self, event):
         self.is_hovered = True
         theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
         self.color_anim.stop()
-        self.color_anim.setStartValue(self.handle_color)
+        self.color_anim.setStartValue(self.handle_colour)
         self.color_anim.setEndValue(QColor(f"{theme.scroll_handle_hover}"))
         self.color_anim.start()
         super().enterEvent(event)
@@ -519,7 +519,7 @@ class RoundedScrollBar(QScrollBar):
         self.is_hovered = False
         theme = self.controller.current_theme if (self.controller and hasattr(self.controller, 'current_theme')) else Themes.THEME_DEFAULT
         self.color_anim.stop()
-        self.color_anim.setStartValue(self.handle_color)
+        self.color_anim.setStartValue(self.handle_colour)
         self.color_anim.setEndValue(QColor(f"{theme.scroll_handle}"))
         self.color_anim.start()
         super().leaveEvent(event)
@@ -549,7 +549,7 @@ class RoundedScrollBar(QScrollBar):
         )
         if handle_rect.isValid() and not handle_rect.isEmpty():
             painter.setPen(QPen(QColor(f"{theme.scroll_border}"), 2))
-            painter.setBrush(self.handle_color)
+            painter.setBrush(self.handle_colour)
             
             if self.orientation() == Qt.Orientation.Vertical:
                 h_rect = handle_rect.adjusted(2, 2, -2, -2)

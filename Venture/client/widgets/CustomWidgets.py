@@ -1,8 +1,8 @@
-from PyQt6.QtWidgets import QWidget, QPushButton, QScrollBar, QStyleOptionSlider, QStyle, QStackedWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QCheckBox
-from PyQt6.QtCore import QEvent, Qt, QVariantAnimation, QParallelAnimationGroup, QPropertyAnimation, QRect, QEasingCurve, QSize, QObject
+from PyQt6.QtWidgets import QFrame, QWidget, QPushButton, QScrollBar, QStyleOptionSlider, QStyle, QStackedWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QCheckBox
+from PyQt6.QtCore import QEvent, Qt, QVariantAnimation, QParallelAnimationGroup, QPropertyAnimation, QRect, QEasingCurve, QSize, QObject, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap, QFont, QIcon, QLinearGradient
 import Themes
-import os, time
+import os, time, re
 
 def get_resolved_icon_path(icon_str: str) -> str:
     """Resolves an icon path dynamically, supporting built-in assets in icons/core and custom user files"""
@@ -122,9 +122,9 @@ class ProjectCardWidget(QWidget):
         # Status row, contains status badge & elapsed time
         statusRowWidget = QWidget(self)
         if self.project_instance.status.value == 1:
-            statusRowColour = [QColor(theme.core_negativebutton_bg.hex1), QColor(theme.core_negativebutton_bg.hex2)]
+            statusRowColour = [QColor(theme.core_neg_bg.hex1), QColor(theme.core_neg_bg.hex2)]
         elif self.project_instance.status.value == 2:
-            statusRowColour = [QColor(theme.core_positivebutton_bg.hex1), QColor(theme.core_positivebutton_bg.hex2)]
+            statusRowColour = [QColor(theme.core_pos_bg.hex1), QColor(theme.core_pos_bg.hex2)]
         else:
             statusRowColour = [QColor(theme.core_bg_side.hex1), QColor(theme.core_bg_side.hex2)]
         statusRowWidget.setStyleSheet(
@@ -132,7 +132,7 @@ class ProjectCardWidget(QWidget):
             f"border: none; border-radius: 8px; padding: 0px;"
         )
         
-        statusBadge = QLabel(self.project_instance.status.name, statusRowWidget)
+        statusBadge = QLabel(self.project_instance.status.name.replace("_", " "), statusRowWidget)
         statusBadge.setFont(QFont(activeFont, 10, QFont.Weight.Bold))
         statusBadge.setStyleSheet(
             f"color: {theme.core_widgets_gentext};"
@@ -195,10 +195,9 @@ class ProjectCardWidget(QWidget):
         baseline_width = 500 # base card width
         diff = max(0, baseline_width - current_width)
         
-        # Reduce lengths every time the card gets 20 pixels narrower
         steps = diff // 20
-        new_len_name = max(4, self.base_max_len_name - steps)       #  -1 length per step
-        new_len_desc = max(4, self.base_max_len_desc - steps*10)    # -10 length per step
+        new_len_name = max(4, self.base_max_len_name - steps)       
+        new_len_desc = max(4, self.base_max_len_desc - steps*10)    
         
         name = self.project_instance.name
         desc = self.project_instance.desc
@@ -218,7 +217,7 @@ class ProjectCardWidget(QWidget):
                 self.descLabel.setText(new_displaydesc)
 
 
-class TaskCardWidget(QWidget):
+class TaskCardWidget(QFrame):
     """Custom widget for Task Cards"""
     def __init__(self, task_instance, parent=None, on_update_callback=None):
         super().__init__(parent)
@@ -230,93 +229,99 @@ class TaskCardWidget(QWidget):
         controller = getattr(self.task_instance, 'controller_ref', None)
         activeFont = controller.activeJetFamFont if controller and hasattr(controller, 'activeJetFamFont') else "Arial"
         theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+        self.animator = getattr(controller, 'animator', None)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 12, 15, 12)
+        completed = bool(self.task_instance.status)
+
+        bg1 = theme.core_pos_bg.hex1 if completed else theme.core_bg_side.hex1
+        bg2 = theme.core_pos_bg.hex2 if completed else theme.core_bg_side.hex2
+        border_col = theme.core_pos_border if completed else theme.core_neutral_border
+
+        self.setObjectName("TaskCard")
+        self.setStyleSheet(
+            f"    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {bg1}, stop:1 {bg2});"
+            f"    border: 3px solid {border_col};"
+            f"    border-radius: 15px;"
+        )
+        self.installEventFilter(self)
+
+        # Main layout of the TaskCard frame
+        contentContainer = QVBoxLayout(self)
+        contentContainer.setContentsMargins(12, 10, 12, 10)
+        contentContainer.setSpacing(8)
+
+        self.taskContentWidget = QWidget(self)
+        self.taskContentWidget.setObjectName("taskContentWidget")
+        self.taskContentWidget.setStyleSheet("background: transparent; border: none;")
+        
+        layout = QHBoxLayout(self.taskContentWidget)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        self.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {theme.project_bg.hex1}, stop:1 {theme.project_bg.hex2});"
-            f"border: 3px solid {theme.project_border}; border-radius: 15px;"
-        )
+        # Section with Name, Priority, & Deadline
+        taskDetails = QVBoxLayout()
+        taskDetails.setSpacing(10)
 
-        topRow = QHBoxLayout()
-        topRow.setSpacing(10)
+        self.nameLabel = QLabel(f"{self.task_instance.name}")
+        self.nameLabel.setFont(QFont(activeFont, 16, QFont.Weight.Bold))
+        self.nameLabel.setStyleSheet(f"color: {theme.sidebar_activebtn if not completed else theme.core_widgets_gentext}; border: none; background: transparent;")
+
+        weight = getattr(self.task_instance, "weight", None)
+        weight_str = weight.name.replace("_", " ").title() if hasattr(weight, "name") else str(weight)
+        self.weightLabel = QLabel(weight_str)
+        self.weightLabel.setFont(QFont(activeFont, 9, QFont.Weight.Light))
+        self.weightLabel.setStyleSheet(f"color: {theme.core_widgets_gentext}; border: none; background: transparent;")
+
+        deadline_str = getattr(self.task_instance, 'deadline', "No Deadline")
+        self.deadlineLabel = QLabel(f"Deadline: {deadline_str}", self.taskContentWidget)
+        self.deadlineLabel.setFont(QFont(activeFont, 10, QFont.Weight.Bold))
+        self.deadlineLabel.setStyleSheet(f"color: {theme.core_widgets_gentext}; background: transparent; border: none;")
+
+        taskDetails.addWidget(self.nameLabel)
+        taskDetails.addWidget(self.weightLabel)
+        taskDetails.addWidget(self.deadlineLabel)
 
         has_subtasks = bool(self.task_instance.subtasks)
         if not has_subtasks:
-            self.checkbox = QCheckBox(self.task_instance.name)
+            self.checkbox = QCheckBox("", self.taskContentWidget)
             self.checkbox.setChecked(bool(self.task_instance.status))
             self.checkbox.setFont(QFont(activeFont, 14, QFont.Weight.Bold))
-            self.checkbox.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
             self.checkbox.stateChanged.connect(self.onCheckboxChanged)
-            topRow.addWidget(self.checkbox, 1)
+
+            chk_border = theme.core_pos_border if completed else theme.core_neutral_border
+            chk_border_hover = theme.core_pos_border_hover
+            
+            self.checkbox.setStyleSheet(
+                f"QCheckBox {{"
+                f"    color: {theme.project_text};"
+                f"    background: transparent;"
+                f"    border: none; outline: none;"
+                f"}}"
+                f"QCheckBox::indicator {{"
+                f"    width: 32px; height: 32px;"
+                f"    background: {theme.core_neutral_bg.hex1};"
+                f"    border: 2px solid {chk_border}; border-radius: 12px;"
+                f"    outline: none;"
+                f"}}"
+                f"QCheckBox::indicator:hover {{"
+                f"    border: 2px solid {chk_border_hover};"
+                f"    outline: none;"
+                f"}}"
+                f"QCheckBox::indicator:checked {{"
+                f"    background: {theme.core_pos_border};"
+                f"    border: 2px solid {theme.core_pos_border};"
+                f"    outline: none;"
+                f"}}"
+            )
+            self.checkbox.installEventFilter(self)
+            layout.addWidget(self.checkbox)
         else:
-            nameLbl = QLabel(self.task_instance.name)
-            nameLbl.setFont(QFont(activeFont, 14, QFont.Weight.Bold))
-            nameLbl.setStyleSheet("color: #ffa500; border: none; background: transparent;")
-            topRow.addWidget(nameLbl, 1)
-
-            pct_val = int(getattr(self.task_instance, 'progress', 0.0))
-            pctLbl = QLabel(f"{pct_val}%")
-            pctLbl.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
-            pctLbl.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
-            topRow.addWidget(pctLbl)
-
-        animator = getattr(controller, 'animator', None)
-        
-        # New Subtask button
-        btnPlus = HoverButton("+", parent=self, animator=animator)
-        btnPlus.setFixedSize(32, 32)
-        btnPlus.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
-        btnPlus.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {theme.core_positivebutton_bg.hex1}, stop:0.8 {theme.core_positivebutton_bg.hex2});"
-            f"color: {theme.core_widgets_btntext}; border: 2px solid {theme.core_positivebutton_border}; border-radius: 8px;"
-        )
-        btnPlus.setHoverData(["border"], [theme.core_positivebutton_border], [theme.core_positivebutton_border_hover])
-        btnPlus.clicked.connect(self.createSubtaskPrompt)
-        topRow.addWidget(btnPlus)
-
-        # Edit button
-        btnEdit = HoverButton("", parent=self, animator=animator)
-        btnEdit.setFixedSize(32, 32)
-        edit_icon_path = get_resolved_icon_path("icon_project_edit.png")
-        if edit_icon_path and os.path.exists(edit_icon_path):
-            pm = QPixmap(edit_icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            tinted_pm = tint_pixmap(pm, QColor(theme.core_widgets_gentext))
-            btnEdit.setIcon(QIcon(tinted_pm))
-        btnEdit.setStyleSheet(f"background: {theme.scroll_track}; border: 2px solid {theme.core_widgets_border}; border-radius: 8px;")
-        btnEdit.setHoverData(["border"], [theme.core_widgets_border], [theme.core_positivebutton_border])
-        btnEdit.clicked.connect(self.editTaskPrompt)
-        topRow.addWidget(btnEdit)
-
-        # Delete button
-        btnDelete = HoverButton("", parent=self, animator=animator)
-        btnDelete.setFixedSize(32, 32)
-        delete_icon_path = get_resolved_icon_path("icon_project_delete.png")
-        if delete_icon_path and os.path.exists(delete_icon_path):
-            pm = QPixmap(delete_icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            tinted_pm = tint_pixmap(pm, QColor(theme.core_negativebutton_border))
-            btnDelete.setIcon(QIcon(tinted_pm))
-        btnDelete.setStyleSheet(f"background: {theme.scroll_track}; border: 2px solid {theme.core_widgets_border}; border-radius: 8px;")
-        btnDelete.setHoverData(["border"], [theme.core_widgets_border], [theme.core_negativebutton_border])
-        btnDelete.clicked.connect(self.deleteTaskPrompt)
-        topRow.addWidget(btnDelete)
-
-        layout.addLayout(topRow)
-
-        deadline_str = getattr(self.task_instance, 'deadline', "No Deadline")
-        deadlineLbl = QLabel(f"Deadline: {deadline_str}")
-        deadlineLbl.setFont(QFont(activeFont, 10, QFont.Weight.Light))
-        deadlineLbl.setStyleSheet(f"color: {theme.core_widgets_gentext}; background: transparent; border: none;")
-        layout.addWidget(deadlineLbl)
-
-        if has_subtasks:
+            progDetails = QHBoxLayout()
             progBar = QProgressBar()
             progBar.setRange(0, 100)
             progBar.setValue(int(getattr(self.task_instance, 'progress', 0.0)))
             progBar.setTextVisible(False)
-            progBar.setFixedHeight(8)
+            progBar.setFixedHeight(10)
             progBar.setStyleSheet(
                 "QProgressBar {"
                 f"border: 2px solid {theme.core_widgets_border}; border-radius: 4px; background-color: {theme.core_widgets_border};"
@@ -325,25 +330,133 @@ class TaskCardWidget(QWidget):
                 f"background: qlineargradient(x1:0, y:0.5, x2:1, y2:0.5, stop:0.2 {theme.project_progress.hex1}, stop:0.9 {theme.project_progress.hex2});"
                 "   border-radius: 2px; }"
             )
-            layout.addWidget(progBar)
+            
+            percentVal = int(getattr(self.task_instance, 'progress', 0.0))
+            percentLabel = QLabel(f"{percentVal}%", self.taskContentWidget)
+            percentLabel.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
+            percentLabel.setStyleSheet(f"color: {theme.project_text}; background: transparent; border: none;")
 
+            progDetails.addWidget(percentLabel)
+            progDetails.addWidget(progBar)
+            taskDetails.addLayout(progDetails)
+        layout.addLayout(taskDetails, 3)
+
+        actionBtns = QGridLayout()
+        actionBtns.setContentsMargins(0, 8, 0, 8)
+        
+        btnPlus = HoverButton("+", parent=self.taskContentWidget, animator=self.animator)
+        btnPlus.setFixedSize(32, 32)
+        btnPlus.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
+        btnPlus.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {theme.core_pos_bg.hex1}, stop:0.8 {theme.core_pos_bg.hex2});"
+            f"color: {theme.core_widgets_btntext};"
+            f"border: 2px solid {theme.core_pos_border}; border-radius: 8px;"
+            f"outline: none;"
+        )
+        btnPlus.setHoverData(["border"], [theme.core_pos_border], [theme.core_pos_border_hover])
+        btnPlus.clicked.connect(self.createSubtaskPrompt)
+
+        btnEdit = HoverButton("", parent=self.taskContentWidget, animator=self.animator)
+        btnEdit.setFixedSize(32, 32)
+        edit_icon_path = get_resolved_icon_path("icon_project_edit.png")
+        if edit_icon_path and os.path.exists(edit_icon_path):
+            pm = QPixmap(edit_icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            tinted_pm = tint_pixmap(pm, QColor(theme.core_widgets_btntext))
+            btnEdit.setIcon(QIcon(tinted_pm))
+        btnEdit.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {theme.core_pos_bg.hex1}, stop:0.8 {theme.core_pos_bg.hex2});"
+            f"color: {theme.core_widgets_btntext};"
+            f"border: 2px solid {theme.core_pos_border}; border-radius: 8px;"
+            f"outline: none;"
+        )
+        btnEdit.setHoverData(["border"], [theme.core_widgets_border], [theme.core_pos_border_hover])
+        btnEdit.clicked.connect(self.editTaskPrompt)
+
+        btnDelete = HoverButton("", parent=self.taskContentWidget, animator=self.animator)
+        btnDelete.setFixedHeight(32)
+        delete_icon_path = get_resolved_icon_path("icon_project_delete.png")
+        if delete_icon_path and os.path.exists(delete_icon_path):
+            pm = QPixmap(delete_icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            tinted_pm = tint_pixmap(pm, QColor(theme.core_widgets_btntext))
+            btnDelete.setIcon(QIcon(tinted_pm))
+        btnDelete.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {theme.core_neg_bg.hex1}, stop:0.8 {theme.core_neg_bg.hex2});"
+            f"color: {theme.core_widgets_btntext};"
+            f"border: 2px solid {theme.core_neg_border}; border-radius: 8px;"
+            f"outline: none;"
+        )
+        btnDelete.setHoverData(["border"], [theme.core_widgets_border], [theme.core_neg_border_hover])
+        btnDelete.clicked.connect(self.deleteTaskPrompt)
+
+        actionBtns.addWidget(btnPlus, 0, 0)
+        actionBtns.addWidget(btnEdit, 0, 1)
+        actionBtns.addWidget(btnDelete, 1, 0, 1, 2)
+        layout.addLayout(actionBtns)
+
+        contentContainer.addWidget(self.taskContentWidget)
+
+        if has_subtasks:
             for sub in self.task_instance.subtasks:
-                subBox = QWidget()
-                subBox.setStyleSheet("background: rgba(30,30,30,0.7); border: 2px solid #555; border-radius: 8px;")
-                sbLayout = QHBoxLayout(subBox)
-                sbLayout.setContentsMargins(10, 6, 10, 6)
-                
-                sub_name = sub.get("name", "") if isinstance(sub, dict) else getattr(sub, "name", str(sub))
-                sLbl = QLabel(f"• {sub_name}")
-                sLbl.setFont(QFont(activeFont, 11, QFont.Weight.Normal))
-                sLbl.setStyleSheet("color: white; border: none; background: transparent;")
-                sbLayout.addWidget(sLbl)
-                layout.addWidget(subBox)
+                sub.controller_ref = controller
+                subtaskCard = SubtaskCardWidget(sub, self, on_update_callback=self.on_update_callback)
+                contentContainer.addWidget(subtaskCard)
 
     def onCheckboxChanged(self, state):
-        self.task_instance.status = (state == Qt.CheckState.Checked.value or state == 2)
+        new_status = (state == Qt.CheckState.Checked.value or state == 2)
+        self.task_instance.status = new_status
+
+        controller = getattr(self.task_instance, 'controller_ref', None)
+        theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+
+        if self.animator:
+            start_bg1 = theme.core_bg_side.hex1 if new_status else theme.core_pos_bg.hex1
+            end_bg1 = theme.core_pos_bg.hex1 if new_status else theme.core_bg_side.hex1
+
+            start_bg2 = theme.core_bg_side.hex2 if new_status else theme.core_pos_bg.hex2
+            end_bg2 = theme.core_pos_bg.hex2 if new_status else theme.core_bg_side.hex2
+            
+            start_text = theme.sidebar_activebtn if new_status else theme.core_widgets_gentext
+            end_text = theme.core_widgets_gentext if new_status else theme.sidebar_activebtn
+
+            self._anim_col1 = QColor(start_bg1)
+            self._anim_col2 = QColor(start_bg2)
+
+            # Target `self` (the main card frame) instead of self.taskContentWidget so background matches the rounded border bounds perfectly
+            bg_anim1 = self.animator.createAnimation(self, "background", start_bg1, end_bg1, duration=150)
+            bg_anim2 = self.animator.createAnimation(self, "background", start_bg2, end_bg2, duration=150)
+
+            def update_task_gradient():
+                try:
+                    c1 = self._anim_col1.name() if isinstance(self._anim_col1, QColor) else str(self._anim_col1)
+                    c2 = self._anim_col2.name() if isinstance(self._anim_col2, QColor) else str(self._anim_col2)
+                    grad_str = f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {c1}, stop:1 {c2})"
+                    curr_ss = self.styleSheet() or ""
+                    if re.search(r"\bbackground\s*:", curr_ss):
+                        new_ss = re.sub(r"background\s*:[^;]+;", f"background: {grad_str};", curr_ss)
+                    else:
+                        new_ss = curr_ss.rstrip(";") + f"; background: {grad_str};"
+                    self.setStyleSheet(new_ss)
+                except RuntimeError:
+                    return
+
+            if bg_anim1:
+                bg_anim1.valueChanged.connect(lambda val: setattr(self, '_anim_col1', val) or update_task_gradient())
+                bg_anim1.start()
+                self._bg_anim1 = bg_anim1
+
+            if bg_anim2:
+                bg_anim2.valueChanged.connect(lambda val: setattr(self, '_anim_col2', val) or update_task_gradient())
+                bg_anim2.start()
+                self._bg_anim2 = bg_anim2
+
+            if hasattr(self, 'nameLabel'):
+                txt_anim = self.animator.createAnimation(self.nameLabel, "text", start_text, end_text, duration=150)
+                if txt_anim:
+                    txt_anim.start()
+                    self._txt_anim = txt_anim
+
         if self.on_update_callback:
-            self.on_update_callback()
+            QTimer.singleShot(250, self.on_update_callback)
 
     def createSubtaskPrompt(self):
         controller = getattr(self.task_instance, 'controller_ref', None)
@@ -360,16 +473,18 @@ class TaskCardWidget(QWidget):
             controller=controller
         )
 
-    def onSubtaskCreated(self, sub_name, sub_deadline=""):
-        new_sub = {
-            "parentID": self.task_instance.taskID,
-            "subtaskID": int(time.time()),
-            "name": sub_name,
-            "desc": "",
-            "tags": [],
-            "weight": 1,
-            "status": False
-        }
+    def onSubtaskCreated(self, sub_name, sub_deadline="", sub_weight=Themes.Weight.MEDIUM_PRIORITY if hasattr(Themes, 'Weight') else None):
+        from ProjectClasses import Subtask, Weight
+        new_sub = Subtask(
+            parentID=self.task_instance.taskID,
+            subtaskID=int(time.time()),
+            name=sub_name,
+            desc="",
+            tags=[],
+            weight=sub_weight if sub_weight else Weight.MEDIUM_PRIORITY,
+            status=False
+        )
+        new_sub.controller_ref = self.task_instance.controller_ref
         if not hasattr(self.task_instance, 'subtasks') or self.task_instance.subtasks is None:
             self.task_instance.subtasks = []
         self.task_instance.subtasks.append(new_sub)
@@ -391,9 +506,11 @@ class TaskCardWidget(QWidget):
             controller=controller
         )
 
-    def onTaskEdited(self, new_name, new_deadline):
+    def onTaskEdited(self, new_name, new_deadline, new_weight=None):
         self.task_instance.name = new_name
         self.task_instance.deadline = new_deadline
+        if new_weight is not None:
+            self.task_instance.weight = new_weight
         if self.on_update_callback:
             self.on_update_callback()
 
@@ -419,6 +536,161 @@ class TaskCardWidget(QWidget):
             project_ref.tasks = [t for t in project_ref.tasks if (t.taskID if hasattr(t, 'taskID') else t.get("taskID")) != self.task_instance.taskID]
         if self.on_update_callback:
             self.on_update_callback()
+
+class SubtaskCardWidget(QFrame):
+    """Custom widget for Subtask Cards"""
+    def __init__(self, subtask, parent=None, on_update_callback=None):
+        super().__init__(parent)
+        self.subtask = subtask
+        self.on_update_callback = on_update_callback
+        self.setup_ui()
+
+    def setup_ui(self):
+        controller = getattr(self.subtask, 'controller_ref', None)
+        activeFont = controller.activeJetFamFont if controller and hasattr(controller, 'activeJetFamFont') else "Arial"
+        theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+        self.animator = getattr(controller, 'animator', None)
+
+        completed = bool(getattr(self.subtask, 'status', False))
+
+        bg1 = theme.core_pos_bg.hex1 if completed else theme.sidebar_neutralbtn_border
+        bg2 = theme.core_pos_bg.hex2 if completed else theme.sidebar_neutralbtn_border
+        border_col = theme.core_pos_border if completed else theme.sidebar_highlightedbtn_border
+
+        self.setObjectName("SubtaskCard")
+        self.setStyleSheet(
+            f"    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {bg1}, stop:1 {bg2});"
+            f"    border: 3px solid {border_col};"
+            f"    border-radius: 15px;"
+        )
+        self.installEventFilter(self)
+
+        contentContainer = QHBoxLayout(self)
+        contentContainer.setContentsMargins(10, 8, 10, 8)
+
+        self.checkbox = QCheckBox("")
+        self.checkbox.setChecked(completed)
+        self.checkbox.setFont(QFont(activeFont, 14, QFont.Weight.Bold))
+        self.checkbox.stateChanged.connect(self.onCheckboxChanged)
+
+        chk_border = theme.core_pos_border if completed else theme.core_neutral_border
+        chk_border_hover = theme.core_pos_border_hover
+        
+        self.checkbox.setStyleSheet(
+            f"QCheckBox {{"
+            f"    color: {theme.project_text};"
+            f"    background: transparent;"
+            f"    border: none; outline: none;"
+            f"}}"
+            f"QCheckBox::indicator {{"
+            f"    width: 18px; height: 18px;"
+            f"    background: {theme.core_neutral_bg.hex1};"
+            f"    border: 2px solid {chk_border}; border-radius: 4px;"
+            f"    outline: none;"
+            f"}}"
+            f"QCheckBox::indicator:hover {{"
+            f"    border: 2px solid {chk_border_hover};"
+            f"    outline: none;"
+            f"}}"
+            f"QCheckBox::indicator:checked {{"
+            f"    background: {theme.core_pos_border};"
+            f"    border: 2px solid {theme.core_pos_border};"
+            f"    outline: none;"
+            f"}}"
+        )
+        contentContainer.addWidget(self.checkbox)
+
+        self.subtaskDetailsContainer = QVBoxLayout()
+        self.subtaskDetailsContainer.setContentsMargins(0, 0, 0, 0)
+
+        sub_name = getattr(self.subtask, "name", "")
+        self.nameLabel = QLabel(sub_name)
+        self.nameLabel.setFont(QFont(activeFont, 12, QFont.Weight.Bold))
+        self.nameLabel.setStyleSheet(f"color: {theme.core_widgets_gentext}; border: none; background: transparent;")
+
+        sub_weight = getattr(self.subtask, "weight", None)
+        weight_str = sub_weight.name.replace("_", " ").title() if hasattr(sub_weight, "name") else str(sub_weight)
+        self.weightLabel = QLabel(weight_str)
+        self.weightLabel.setFont(QFont(activeFont, 9, QFont.Weight.Light))
+        self.weightLabel.setStyleSheet(f"color: {theme.core_widgets_gentext}; border: none; background: transparent;")
+
+        self.subtaskDetailsContainer.addWidget(self.nameLabel)
+        self.subtaskDetailsContainer.addWidget(self.weightLabel)
+        contentContainer.addLayout(self.subtaskDetailsContainer, 1)
+
+    def eventFilter(self, obj, event):
+        controller = getattr(self.subtask, 'controller_ref', None)
+        theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+        completed = bool(getattr(self.subtask, 'status', False))
+        
+        b_col = theme.core_pos_border if completed else theme.core_neutral_border
+        hl_col = theme.core_pos_border_hover
+
+        if obj.objectName() == "SubtaskCard":
+            if event.type() == QEvent.Type.Enter:
+                if self.animator:
+                    self.animator.animateOnHover(obj, ["border"], [b_col], [hl_col])
+                return True
+            elif event.type() == QEvent.Type.Leave:
+                if self.animator:
+                    self.animator.animateOnHover(obj, ["border"], [hl_col], [b_col])
+                return True
+        return super().eventFilter(obj, event)
+
+    def onCheckboxChanged(self, state):
+        new_status = (state == Qt.CheckState.Checked.value or state == 2)
+        self.subtask.status = new_status
+
+        controller = getattr(self.subtask, 'controller_ref', None)
+        theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
+
+        if self.animator:
+            start_bg1 = theme.sidebar_neutralbtn_border if new_status else theme.core_pos_bg.hex1
+            end_bg1 = theme.core_pos_bg.hex1 if new_status else theme.sidebar_neutralbtn_border
+
+            start_bg2 = theme.sidebar_neutralbtn_border if new_status else theme.core_pos_bg.hex2
+            end_bg2 = theme.core_pos_bg.hex2 if new_status else theme.sidebar_neutralbtn_border
+
+            self._anim_col1 = QColor(start_bg1)
+            self._anim_col2 = QColor(start_bg2)
+
+            bg_anim1 = self.animator.createAnimation(self, "background", start_bg1, end_bg1, duration=150)
+            bg_anim2 = self.animator.createAnimation(self, "background", start_bg2, end_bg2, duration=150)
+
+            def update_subtask_gradient():
+                try:
+                    c1 = self._anim_col1.name() if isinstance(self._anim_col1, QColor) else str(self._anim_col1)
+                    c2 = self._anim_col2.name() if isinstance(self._anim_col2, QColor) else str(self._anim_col2)
+                    grad_str = f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {c1}, stop:1 {c2})"
+                    curr_ss = self.styleSheet() or ""
+                    if re.search(r"\bbackground\s*:", curr_ss):
+                        new_ss = re.sub(r"background\s*:[^;]+;", f"background: {grad_str};", curr_ss)
+                    else:
+                        new_ss = curr_ss.rstrip(";") + f"; background: {grad_str};"
+                    self.setStyleSheet(new_ss)
+                except RuntimeError:
+                    return
+
+            if bg_anim1:
+                bg_anim1.valueChanged.connect(lambda val: setattr(self, '_anim_col1', val) or update_subtask_gradient())
+                bg_anim1.start()
+                self._bg_anim1 = bg_anim1
+
+            if bg_anim2:
+                bg_anim2.valueChanged.connect(lambda val: setattr(self, '_anim_col2', val) or update_subtask_gradient())
+                bg_anim2.start()
+                self._bg_anim2 = bg_anim2
+
+            if hasattr(self, 'nameLabel'):
+                start_text = theme.core_widgets_gentext if new_status else theme.sidebar_activebtn
+                end_text = theme.sidebar_activebtn if new_status else theme.core_widgets_gentext
+                txt_anim = self.animator.createAnimation(self.nameLabel, "text", start_text, end_text, duration=150)
+                if txt_anim:
+                    txt_anim.start()
+                    self._txt_anim = txt_anim
+
+        if self.on_update_callback:
+            QTimer.singleShot(250, self.on_update_callback)
 
 
 class HoverButton(QPushButton):

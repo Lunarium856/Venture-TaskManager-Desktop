@@ -18,17 +18,17 @@ class Theme:
     core_widgets_btntext: str
     core_widgets_border: str
 
-    core_neutralbutton_bg: GradientColourLayer
-    core_neutralbutton_border: str
-    core_neutralbutton_border_hover: str
+    core_neutral_bg: GradientColourLayer
+    core_neutral_border: str
+    core_neutral_border_hover: str
 
-    core_positivebutton_bg: GradientColourLayer
-    core_positivebutton_border: str
-    core_positivebutton_border_hover: str
+    core_pos_bg: GradientColourLayer
+    core_pos_border: str
+    core_pos_border_hover: str
 
-    core_negativebutton_bg: GradientColourLayer
-    core_negativebutton_border: str
-    core_negativebutton_border_hover: str
+    core_neg_bg: GradientColourLayer
+    core_neg_border: str
+    core_neg_border_hover: str
 
     sidebar_neutralbtn: str
     sidebar_neutralbtn_bg: str
@@ -65,17 +65,17 @@ THEME_DEFAULT = Theme(
     core_widgets_btntext="#ffffff",
     core_widgets_border="#000000",
 
-    core_neutralbutton_bg=GradientColourLayer("#444444", "#353535"),
-    core_neutralbutton_border="#000000",
-    core_neutralbutton_border_hover="#ffffff",
+    core_neutral_bg=GradientColourLayer("#444444", "#353535"),
+    core_neutral_border="#000000",
+    core_neutral_border_hover="#ffffff",
 
-    core_positivebutton_bg=GradientColourLayer("#00a0bd", "#23f3d7"),
-    core_positivebutton_border="#000000",
-    core_positivebutton_border_hover="#ffffff",
+    core_pos_bg=GradientColourLayer("#00a0bd", "#23f3d7"),
+    core_pos_border="#000000",
+    core_pos_border_hover="#ffffff",
 
-    core_negativebutton_bg=GradientColourLayer("#ff2b24", "#ff6c24"),
-    core_negativebutton_border="#000000",
-    core_negativebutton_border_hover="#ffffff",
+    core_neg_bg=GradientColourLayer("#ff2b24", "#ff6c24"),
+    core_neg_border="#000000",
+    core_neg_border_hover="#ffffff",
 
     sidebar_neutralbtn="#cccccc",
     sidebar_neutralbtn_bg="transparent",
@@ -110,13 +110,13 @@ THEME_DEFAULT = Theme(
 #     core_widgets_btntext="#ffffff",
 #     core_widgets_border="#000000",
 
-#     core_positivebutton_bg=GradientColourLayer("#00a0bd", "#35ffbc"),
-#     core_positivebutton_border="#535353",
-#     core_positivebutton_border_hover="#ffffff",
+#     core_pos_bg=GradientColourLayer("#00a0bd", "#35ffbc"),
+#     core_pos_border="#535353",
+#     core_pos_border_hover="#ffffff",
 
-#     core_negativebutton_bg=GradientColourLayer("#ff6c24", "#ffa361"),
-#     core_negativebutton_border="#535353",
-#     core_negativebutton_border_hover="#ffffff",
+#     core_neg_bg=GradientColourLayer("#ff6c24", "#ffa361"),
+#     core_neg_border="#535353",
+#     core_neg_border_hover="#ffffff",
 
 #     sidebar_neutralbtn="#cccccc",
 #     sidebar_neutralbtn_bg="transparent",

@@ -600,10 +600,11 @@ class EditProjectOverlay(CreateProjectOverlay):
 
 class CreateTaskOverlay(QWidget):
     """Modal overlay for creating a new task with name, priority, and dropdown deadline fields"""
-    def __init__(self, parent=None, animator=None, activeFont=None, title="CREATE TASK", on_create_callback=None, controller=None):
+    def __init__(self, parent=None, animator=None, activeFont=None, title="CREATE TASK", is_subtask=False, on_create_callback=None, controller=None):
         super().__init__(parent)
         self.animator = animator
         self.activeFont = activeFont if activeFont else "Arial"
+        self.is_subtask = is_subtask
         self.on_create_callback = on_create_callback
         self.controller = controller
         self.theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
@@ -622,7 +623,8 @@ class CreateTaskOverlay(QWidget):
         self.backdrop.setStyleSheet("background-color: rgba(0, 0, 0, 128);")
 
         self.dialogBox = QWidget(self)
-        self.dialogBox.setFixedSize(560, 400)
+        box_height = 290 if self.is_subtask else 400
+        self.dialogBox.setFixedSize(560, box_height)
         self.updateDialogPosition()
         self.dialogBox.setStyleSheet(
             "QWidget {"
@@ -637,43 +639,6 @@ class CreateTaskOverlay(QWidget):
         dialogLayout.setSpacing(15)
 
         label_font = QFont(self.activeFont, 11, QFont.Weight.Bold)
-
-        # Modal Title
-        titleLabel = QLabel(title)
-        titleLabel.setFont(QFont(self.activeFont, 16, QFont.Weight.Bold))
-        titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        titleLabel.setStyleSheet(f"color: {self.theme.core_pos_bg.hex2}; border: none; background: transparent;")
-        dialogLayout.addWidget(titleLabel)
-
-        # Name Field
-        nameLayout = QHBoxLayout()
-        nameLabel = QLabel("TASK NAME")
-        nameLabel.setFont(label_font)
-        nameLabel.setFixedWidth(130)
-        nameLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-        self.nameInput = QLineEdit()
-        self.nameInput.setFont(label_font)
-        self.nameInput.setStyleSheet(
-            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
-            f"border: 3px solid {self.theme.core_widgets_border};"
-            f"border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
-        )
-        nameLayout.addWidget(nameLabel)
-        nameLayout.addWidget(self.nameInput)
-        dialogLayout.addLayout(nameLayout)
-
-        # Deadline Field
-        deadlineLayout = QHBoxLayout()
-        deadlineLabel = QLabel("DEADLINE")
-        deadlineLabel.setFont(label_font)
-        deadlineLabel.setFixedWidth(130)
-        deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-
-        deadlineWidget = QWidget()
-        deadlineWidget.setStyleSheet("background: transparent; border: none;")
-        deadlineComboLayout = QHBoxLayout(deadlineWidget)
-        deadlineComboLayout.setContentsMargins(0, 0, 0, 0)
-        deadlineComboLayout.setSpacing(10)
 
         dropdownStyle = (
             f"QComboBox {{"
@@ -729,33 +694,71 @@ class CreateTaskOverlay(QWidget):
             f"}}"
         )
 
-        self.monthDropdown = QComboBox()
-        self.monthDropdown.addItems(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
-        self.monthDropdown.setFont(label_font)
-        self.monthDropdown.setStyleSheet(dropdownStyle)
+        # Modal Title
+        titleLabel = QLabel(title)
+        titleLabel.setFont(QFont(self.activeFont, 16, QFont.Weight.Bold))
+        titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        titleLabel.setStyleSheet(f"color: {self.theme.core_pos_bg.hex2}; border: none; background: transparent;")
+        dialogLayout.addWidget(titleLabel)
 
-        self.dayDropdown = QComboBox()
-        self.dayDropdown.setFont(label_font)
-        self.dayDropdown.setStyleSheet(dropdownStyle)
+        # Name Field
+        nameLayout = QHBoxLayout()
+        nameLabel = QLabel("TASK NAME")
+        nameLabel.setFont(label_font)
+        nameLabel.setFixedWidth(130)
+        nameLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        self.nameInput = QLineEdit()
+        self.nameInput.setFont(label_font)
+        self.nameInput.setStyleSheet(
+            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"border: 3px solid {self.theme.core_widgets_border};"
+            f"border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+        )
+        nameLayout.addWidget(nameLabel)
+        nameLayout.addWidget(self.nameInput)
+        dialogLayout.addLayout(nameLayout)
 
-        self.yearDropdown = QComboBox()
-        current_year = datetime.date.today().year
-        years = [str(y) for y in range(current_year, current_year + 11)]
-        self.yearDropdown.addItems(years)
-        self.yearDropdown.setFont(label_font)
-        self.yearDropdown.setStyleSheet(dropdownStyle)
+        # Deadline Field (Omitted for Subtasks)
+        if not self.is_subtask:
+            deadlineLayout = QHBoxLayout()
+            deadlineLabel = QLabel("DEADLINE")
+            deadlineLabel.setFont(label_font)
+            deadlineLabel.setFixedWidth(130)
+            deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
 
-        deadlineComboLayout.addWidget(self.monthDropdown, 2)
-        deadlineComboLayout.addWidget(self.dayDropdown, 1)
-        deadlineComboLayout.addWidget(self.yearDropdown, 2)
+            deadlineWidget = QWidget()
+            deadlineWidget.setStyleSheet("background: transparent; border: none;")
+            deadlineComboLayout = QHBoxLayout(deadlineWidget)
+            deadlineComboLayout.setContentsMargins(0, 0, 0, 0)
+            deadlineComboLayout.setSpacing(10)
 
-        deadlineLayout.addWidget(deadlineLabel, alignment=Qt.AlignmentFlag.AlignTop)
-        deadlineLayout.addWidget(deadlineWidget, 1)
-        dialogLayout.addLayout(deadlineLayout)
+            self.monthDropdown = QComboBox()
+            self.monthDropdown.addItems(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+            self.monthDropdown.setFont(label_font)
+            self.monthDropdown.setStyleSheet(dropdownStyle)
 
-        self.monthDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
-        self.yearDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
-        self.updateDaysInMonth()
+            self.dayDropdown = QComboBox()
+            self.dayDropdown.setFont(label_font)
+            self.dayDropdown.setStyleSheet(dropdownStyle)
+
+            self.yearDropdown = QComboBox()
+            current_year = datetime.date.today().year
+            years = [str(y) for y in range(current_year, current_year + 11)]
+            self.yearDropdown.addItems(years)
+            self.yearDropdown.setFont(label_font)
+            self.yearDropdown.setStyleSheet(dropdownStyle)
+
+            deadlineComboLayout.addWidget(self.monthDropdown, 2)
+            deadlineComboLayout.addWidget(self.dayDropdown, 1)
+            deadlineComboLayout.addWidget(self.yearDropdown, 2)
+
+            deadlineLayout.addWidget(deadlineLabel, alignment=Qt.AlignmentFlag.AlignTop)
+            deadlineLayout.addWidget(deadlineWidget, 1)
+            dialogLayout.addLayout(deadlineLayout)
+
+            self.monthDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
+            self.yearDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
+            self.updateDaysInMonth()
 
         # Priority Field
         weightLayout = QHBoxLayout()
@@ -764,7 +767,7 @@ class CreateTaskOverlay(QWidget):
         weightLabel.setFixedWidth(130)
         weightLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
         self.weightInput = QComboBox()
-        self.weightInput.addItems(["LOW", "MEDIUM", "HIGH"])
+        self.weightInput.addItems(["LOW_PRIORITY", "MEDIUM_PRIORITY", "HIGH_PRIORITY"])
         self.weightInput.setFont(label_font)
         self.weightInput.setStyleSheet(dropdownStyle)
         weightLayout.addWidget(weightLabel)
@@ -865,6 +868,9 @@ class CreateTaskOverlay(QWidget):
                 self.dayDropdown.setCurrentIndex(idx)
 
     def get_deadline_values(self):
+        if getattr(self, 'is_subtask', False):
+            return "No Deadline", "No Deadline", datetime.date.today()
+        
         month_str = self.monthDropdown.currentText()
         day_str = self.dayDropdown.currentText()
         year_str = self.yearDropdown.currentText()
@@ -912,11 +918,13 @@ class CreateTaskOverlay(QWidget):
         name = self.nameInput.text().strip()
         readable_deadline, iso_deadline, dt_obj = self.get_deadline_values()
 
-        if dt_obj < datetime.date.today():
+        if not self.is_subtask and dt_obj < datetime.date.today():
             QMessageBox.warning(self, "Invalid Deadline", "The deadline cannot be set to a date before the current date.")
             return
 
         deadline = iso_deadline
+        
+        # Capture selected priority weight
         weight_str = self.weightInput.currentText()
         try:
             weight = Weight[weight_str]
@@ -925,7 +933,10 @@ class CreateTaskOverlay(QWidget):
 
         if name and self.on_create_callback:
             self.is_submitting = True
-            self.on_create_callback(name, deadline, weight)
+            if self.is_subtask:
+                self.on_create_callback(name, weight)  # Passes correct weight for subtasks
+            else:
+                self.on_create_callback(name, deadline, weight)
             QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
         self.closeOverlay()
 
@@ -947,10 +958,10 @@ class CreateTaskOverlay(QWidget):
 
 class EditTaskOverlay(CreateTaskOverlay):
     """Modal for editing task name, deadline, and priority"""
-    def __init__(self, parent=None, animator=None, activeFont=None, title="EDIT TASK", task_instance=None, on_save_callback=None, controller=None):
+    def __init__(self, parent=None, animator=None, activeFont=None, title="EDIT TASK", is_subtask=False, task_instance=None, on_save_callback=None, controller=None):
         self.task_instance = task_instance
         self.on_save_callback = on_save_callback
-        super().__init__(parent=parent, animator=animator, activeFont=activeFont, title=title, on_create_callback=None, controller=controller)
+        super().__init__(parent=parent, animator=animator, activeFont=activeFont, title=title, is_subtask=is_subtask, on_create_callback=None, controller=controller)
         
         if self.task_instance:
             self.nameInput.setText(self.task_instance.name)

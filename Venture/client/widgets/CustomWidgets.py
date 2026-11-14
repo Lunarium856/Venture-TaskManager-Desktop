@@ -529,11 +529,12 @@ class TaskCardWidget(QFrame):
             animator=controller.animator,
             activeFont=controller.activeJetFamFont,
             title=f"CREATE SUBTASK FOR\n'{self.nameLabel.text()}'",
+            is_subtask=True,
             on_create_callback=self.onSubtaskCreated,
             controller=controller
         )
 
-    def onSubtaskCreated(self, sub_name, sub_deadline="", sub_weight=Themes.Weight.MEDIUM_PRIORITY if hasattr(Themes, 'Weight') else None):
+    def onSubtaskCreated(self, sub_name, sub_weight=None):
         from ProjectClasses import Subtask, Weight
         new_sub = Subtask(
             parentID=self.task_instance.taskID,
@@ -770,6 +771,7 @@ class SubtaskCardWidget(QFrame):
             animator=controller.animator,
             activeFont=controller.activeJetFamFont,
             title="EDIT SUBTASK",
+            is_subtask=True,
             task_instance=self.subtask,
             on_save_callback=self.onSubtaskEdited,
             controller=controller
@@ -777,8 +779,8 @@ class SubtaskCardWidget(QFrame):
 
     def onSubtaskEdited(self, new_name, new_deadline, new_weight=None):
         self.subtask.name = new_name
-        if hasattr(self.subtask, 'deadline'):
-            self.subtask.deadline = new_deadline
+        if new_weight is not None:
+            self.subtask.weight = new_weight
         if new_weight is not None:
             self.subtask.weight = new_weight
         if self.on_update_callback:

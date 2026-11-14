@@ -18,6 +18,7 @@ class Theme:
     core_widgets_btntext: str
     core_widgets_border: str
 
+    # Core - For States
     core_neutral_bg: GradientColourLayer
     core_neutral_border: str
     core_neutral_border_hover: str
@@ -29,6 +30,10 @@ class Theme:
     core_neg_bg: GradientColourLayer
     core_neg_border: str
     core_neg_border_hover: str
+
+    core_tertiary_bg: GradientColourLayer
+    core_tertiary_border: str
+    core_tertiary_border_hover: str
 
     sidebar_neutralbtn: str
     sidebar_neutralbtn_bg: str
@@ -76,6 +81,10 @@ THEME_DEFAULT = Theme(
     core_neg_bg=GradientColourLayer("#ff2b24", "#ff6c24"),
     core_neg_border="#000000",
     core_neg_border_hover="#ffffff",
+
+    core_tertiary_bg=GradientColourLayer("#222433","#15102E"),
+    core_tertiary_border="#444444",
+    core_tertiary_border_hover="#ffffff",
 
     sidebar_neutralbtn="#cccccc",
     sidebar_neutralbtn_bg="transparent",

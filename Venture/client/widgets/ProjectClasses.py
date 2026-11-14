@@ -171,7 +171,9 @@ class Task:
         self.project_ref = None
 
     def newDisplayWidget(self, parent: QObject=None, on_update_callback=None):
-        return TaskCardWidget(self, parent, on_update_callback)
+        widget = TaskCardWidget(self, parent, on_update_callback)
+        self.widget_ref = widget  # TaskCardWdiget reference storage
+        return widget
 
     def recalculate_task_progress(self):
         """Calculates task progress when it has subtasks."""
@@ -186,6 +188,11 @@ class Task:
         self.progress = sub_ratio * 100.0
         
         self.status = (sub_ratio >= 1.0) # Task is complete when all its subtasks are done
+        
+        # Trigger OnCheckboxChanged to play the bg transition
+        if hasattr(self, 'widget_ref') and self.widget_ref:
+            if hasattr(self.widget_ref, 'update_status_visuals'):
+                self.widget_ref.update_status_visuals(self.status)
 
 class Subtask:
     def __init__(self, parentID: int, subtaskID: int, name: str, desc: str, tags: list, weight, status=False):

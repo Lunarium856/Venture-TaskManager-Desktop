@@ -1,10 +1,10 @@
 import SettingsHandler, Themes, AnimationHandler, DummyList
 from ProjectClasses import Project, Task, Subtask, Tag, Status, Weight
-from CustomWidgets import HoverButton, RoundedScrollBar, SmoothGradientWidget, get_resolved_icon_path, tint_pixmap
+from CustomWidgets import HoverButton, RoundedScrollBar, SmoothGradientWidget, EditIconButton, DeleteIconButton, ArchiveIconButton, get_resolved_icon_path, tint_pixmap, animate_progress_bar
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
-import sys, json, os, time, datetime, re, sqlite3
+import sys, json, os, time, datetime, calendar, re, sqlite3
 
 dir_script = os.path.dirname(os.path.abspath(__file__))       # client/core
 client_dir = os.path.dirname(dir_script)                      # client
@@ -183,6 +183,29 @@ def save_projects_to_json(projects_list):
     except IOError as e:
         print(f"Error saving projects: {e}")
 
+def parse_deadline_to_readable(deadline_str):
+    """Converts ISO or legacy deadline strings into a readable format like 'Feb 15 2027'."""
+    if not deadline_str or deadline_str == "No Deadline":
+        return "No Deadline"
+    try:
+        dt = datetime.date.fromisoformat(deadline_str)
+        return dt.strftime("%b %d %Y")
+    except ValueError:
+        pass
+    try:
+        dt = datetime.datetime.strptime(deadline_str, "%b %d %Y").date()
+        return dt.strftime("%b %d %Y")
+    except ValueError:
+        pass
+    try:
+        parts = deadline_str.split('/')
+        if len(parts) == 3:
+            dt = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+            return dt.strftime("%b %d %Y")
+    except Exception:
+        pass
+    return deadline_str
+
 
 class CreateProjectOverlay(QWidget):
     """Modal overlay for creating projects"""
@@ -224,6 +247,7 @@ class CreateProjectOverlay(QWidget):
 
         label_font = QFont(self.activeFont, 11, QFont.Weight.Bold)
 
+        # Name Field
         nameLayout = QHBoxLayout()
         nameLabel = QLabel("PROJECT NAME")
         nameLabel.setFont(label_font)
@@ -240,26 +264,102 @@ class CreateProjectOverlay(QWidget):
         nameLayout.addWidget(self.nameInput)
         dialogLayout.addLayout(nameLayout)
 
+        # Deadline Field
         deadlineLayout = QHBoxLayout()
         deadlineLabel = QLabel("DEADLINE")
         deadlineLabel.setFont(label_font)
         deadlineLabel.setFixedWidth(130)
         deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-        self.deadlineInput = QDateEdit()
-        self.deadlineInput.setDate(QDate.currentDate())
-        self.deadlineInput.setCalendarPopup(True)
-        self.deadlineInput.setFont(label_font)
-        self.deadlineInput.setStyleSheet(
-            f"QDateEdit {{"
-            f"    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+
+        deadlineWidget = QWidget()
+        deadlineWidget.setStyleSheet("background: transparent; border: none;")
+        deadlineComboLayout = QHBoxLayout(deadlineWidget)
+        deadlineComboLayout.setContentsMargins(0, 0, 0, 0)
+        deadlineComboLayout.setSpacing(10)
+
+        dropdownStyle = (
+            f"QComboBox {{"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    color: {self.theme.core_widgets_gentext}; outline: none;"
+            f"    border: 3px solid {self.theme.core_widgets_border}; border-radius: 10px; padding: 5px 10px;"
+            f"}}"
+            f"QComboBox::drop-down {{"
+            f"    subcontrol-origin: padding;"
+            f"    subcontrol-position: top right;"
+            f"    width: 28px;"
+            f"    border-left: 2px solid {self.theme.core_widgets_border};"
+            f"    border-top-right-radius: 7px;"
+            f"    border-bottom-right-radius: 7px;"
+            f"    background: transparent;"
+            f"}}"
+            f"QComboBox::down-arrow {{"
+            f"    image: none;"
+            f"    border-left: 5px solid transparent;"
+            f"    border-right: 5px solid transparent;"
+            f"    border-top: 6px solid {self.theme.core_widgets_gentext};"
+            f"    margin-right: 2px;"
+            f"}}"
+            f"QComboBox QAbstractItemView {{"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    color: {self.theme.core_widgets_gentext};"
             f"    border: 3px solid {self.theme.core_widgets_border};"
-            f"    border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+            f"    border-radius: 10px;"
+            f"    selection-background-color: {self.theme.core_pos_bg.hex1};"
+            f"    selection-color: {self.theme.core_widgets_btntext};"
+            f"    outline: none;"
+            f"    padding: 4px;"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar:vertical {{"
+            f"    background: {getattr(self.theme, 'scroll_track', '#1a1a1a')};"
+            f"    width: 10px;"
+            f"    margin: 4px 2px 4px 2px;"
+            f"    border-radius: 5px;"
+            f"    border: 1px solid {getattr(self.theme, 'scroll_border', '#333333')};"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar::handle:vertical {{"
+            f"    background: {getattr(self.theme, 'scroll_handle', '#4a4a4a')};"
+            f"    border-radius: 4px;"
+            f"    min-height: 20px;"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {{"
+            f"    background: {getattr(self.theme, 'scroll_handle_hover', '#6a6a6a')};"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar::add-line:vertical, "
+            f"QComboBox QAbstractItemView QScrollBar::sub-line:vertical {{"
+            f"    height: 0px;"
+            f"    background: none;"
             f"}}"
         )
+
+        self.monthDropdown = QComboBox()
+        self.monthDropdown.addItems(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+        self.monthDropdown.setFont(label_font)
+        self.monthDropdown.setStyleSheet(dropdownStyle)
+
+        self.dayDropdown = QComboBox()
+        self.dayDropdown.setFont(label_font)
+        self.dayDropdown.setStyleSheet(dropdownStyle)
+
+        self.yearDropdown = QComboBox()
+        current_year = datetime.date.today().year
+        years = [str(y) for y in range(current_year, current_year + 11)]
+        self.yearDropdown.addItems(years)
+        self.yearDropdown.setFont(label_font)
+        self.yearDropdown.setStyleSheet(dropdownStyle)
+
+        deadlineComboLayout.addWidget(self.monthDropdown, 2)
+        deadlineComboLayout.addWidget(self.dayDropdown, 1)
+        deadlineComboLayout.addWidget(self.yearDropdown, 2)
+
         deadlineLayout.addWidget(deadlineLabel, alignment=Qt.AlignmentFlag.AlignTop)
-        deadlineLayout.addWidget(self.deadlineInput)
+        deadlineLayout.addWidget(deadlineWidget, 1)
         dialogLayout.addLayout(deadlineLayout)
 
+        self.monthDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
+        self.yearDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
+        self.updateDaysInMonth()
+
+        # Description Field
         descLayout = QHBoxLayout()
         descLabel = QLabel("DESCRIPTION")
         descLabel.setFont(label_font)
@@ -276,9 +376,28 @@ class CreateProjectOverlay(QWidget):
         descLayout.addWidget(self.descInput)
         dialogLayout.addLayout(descLayout)
 
+        iconLayout = QHBoxLayout()
+        iconLabel = QLabel("ICON")
+        iconLabel.setFont(label_font)
+        iconLabel.setFixedWidth(130)
+        iconLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        self.iconInput = QComboBox()
+        self.iconInput.addItems([
+            "Shirt",
+            "Shoes",
+            "Phone"
+        ])
+        self.iconInput.setFont(label_font)
+        self.iconInput.setStyleSheet(dropdownStyle)
+        iconLayout.addWidget(iconLabel)
+        iconLayout.addWidget(self.iconInput)
+        dialogLayout.addLayout(iconLayout)
+        dialogLayout.addStretch()
+
+        # Action Buttons
         bottomBtnLayout = QHBoxLayout()
         bottomBtnLayout.setSpacing(20)
-        
+
         self.btnCreate = HoverButton("CREATE", parent=self.dialogBox, animator=self.animator)
         self.btnCreate.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
         self.btnCreate.setFixedHeight(40)
@@ -308,6 +427,90 @@ class CreateProjectOverlay(QWidget):
         if self.fadeInAnim:
             self.fadeInAnim.start()
 
+    def updateDaysInMonth(self):
+        """Sanitizes day options based on selected month and year (including leap years)."""
+        try:
+            month_idx = self.monthDropdown.currentIndex() + 1
+            year = int(self.yearDropdown.currentText())
+            _, num_days = calendar.monthrange(year, month_idx)
+            
+            current_day = self.dayDropdown.currentText()
+            self.dayDropdown.blockSignals(True)
+            self.dayDropdown.clear()
+            day_items = [str(d) for d in range(1, num_days + 1)]
+            self.dayDropdown.addItems(day_items)
+            
+            if current_day in day_items:
+                self.dayDropdown.setCurrentText(current_day)
+            else:
+                self.dayDropdown.setCurrentIndex(min(len(day_items) - 1, int(current_day) - 1 if current_day.isdigit() else 0))
+            self.dayDropdown.blockSignals(False)
+        except Exception:
+            pass
+
+    def set_initial_date(self, deadline_str):
+        """Sets combo boxes based on an existing deadline string."""
+        if not deadline_str:
+            return
+        dt = None
+        try:
+            dt = datetime.date.fromisoformat(deadline_str)
+        except ValueError:
+            pass
+        if not dt:
+            try:
+                dt = datetime.datetime.strptime(deadline_str, "%b %d %Y").date()
+            except ValueError:
+                pass
+        if not dt:
+            try:
+                parts = deadline_str.split('/')
+                if len(parts) == 3:
+                    dt = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+            except Exception:
+                pass
+
+        if dt:
+            month_abbr = dt.strftime("%b")
+            day_str = str(dt.day)
+            year_str = str(dt.year)
+
+            idx = self.monthDropdown.findText(month_abbr)
+            if idx >= 0:
+                self.monthDropdown.setCurrentIndex(idx)
+            idx = self.yearDropdown.findText(year_str)
+            if idx >= 0:
+                self.yearDropdown.setCurrentIndex(idx)
+            
+            self.updateDaysInMonth()
+            
+            idx = self.dayDropdown.findText(day_str)
+            if idx >= 0:
+                self.dayDropdown.setCurrentIndex(idx)
+
+    def get_deadline_values(self):
+        """Converts dropdown values into readable string, ISO format, and date object."""
+        month_str = self.monthDropdown.currentText()
+        day_str = self.dayDropdown.currentText()
+        year_str = self.yearDropdown.currentText()
+        
+        month_map = {"Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, 
+                     "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12}
+        month_num = month_map.get(month_str, 1)
+        day_num = int(day_str) if day_str.isdigit() else 1
+        year_num = int(year_str) if year_str.isdigit() else datetime.date.today().year
+
+        try:
+            dt_obj = datetime.date(year_num, month_num, day_num)
+            readable_deadline = dt_obj.strftime("%b %d %Y")
+            iso_deadline = dt_obj.isoformat()
+        except ValueError:
+            dt_obj = datetime.date.today()
+            readable_deadline = dt_obj.strftime("%b %d %Y")
+            iso_deadline = dt_obj.isoformat()
+
+        return readable_deadline, iso_deadline, dt_obj
+
     def updateDialogPosition(self):
         parent_rect = self.parent().rect() if self.parent() else self.rect()
         box_x = (parent_rect.width() - self.dialogBox.width()) // 2
@@ -332,7 +535,13 @@ class CreateProjectOverlay(QWidget):
         if self.is_submitting:
             return
         name = self.nameInput.text().strip()
-        deadline = self.deadlineInput.text().strip()
+        readable_deadline, iso_deadline, dt_obj = self.get_deadline_values()
+
+        if dt_obj < datetime.date.today():
+            QMessageBox.warning(self, "Invalid Deadline", "The deadline cannot be set to a date before the current date.")
+            return
+
+        deadline = iso_deadline
         desc = self.descInput.toPlainText().strip()
         if name and self.on_create_callback:
             self.is_submitting = True
@@ -367,16 +576,20 @@ class EditProjectOverlay(CreateProjectOverlay):
             self.nameInput.setText(self.project_instance.name)
             self.descInput.setPlainText(self.project_instance.desc)
             if hasattr(self.project_instance, 'deadline') and self.project_instance.deadline:
-                parsed_date = QDate.fromString(self.project_instance.deadline, "yyyy-MM-dd")
-                if parsed_date.isValid():
-                    self.deadlineInput.setDate(parsed_date)
+                self.set_initial_date(self.project_instance.deadline)
         self.btnCreate.setText("SAVE")
 
     def acceptOverlay(self):
         if self.is_submitting:
             return
         name = self.nameInput.text().strip()
-        deadline = self.deadlineInput.text().strip()
+        readable_deadline, iso_deadline, dt_obj = self.get_deadline_values()
+
+        if dt_obj < datetime.date.today():
+            QMessageBox.warning(self, "Invalid Deadline", "The deadline cannot be set to a date before the current date.")
+            return
+
+        deadline = iso_deadline
         desc = self.descInput.toPlainText().strip()
         if name and self.on_save_callback:
             self.is_submitting = True
@@ -386,7 +599,7 @@ class EditProjectOverlay(CreateProjectOverlay):
 
 
 class CreateTaskOverlay(QWidget):
-    """Modal overlay for creating a new task with name and deadline fields"""
+    """Modal overlay for creating a new task with name, priority, and dropdown deadline fields"""
     def __init__(self, parent=None, animator=None, activeFont=None, title="CREATE TASK", on_create_callback=None, controller=None):
         super().__init__(parent)
         self.animator = animator
@@ -409,7 +622,7 @@ class CreateTaskOverlay(QWidget):
         self.backdrop.setStyleSheet("background-color: rgba(0, 0, 0, 128);")
 
         self.dialogBox = QWidget(self)
-        self.dialogBox.setFixedSize(560, 360)
+        self.dialogBox.setFixedSize(560, 400)
         self.updateDialogPosition()
         self.dialogBox.setStyleSheet(
             "QWidget {"
@@ -425,12 +638,14 @@ class CreateTaskOverlay(QWidget):
 
         label_font = QFont(self.activeFont, 11, QFont.Weight.Bold)
 
+        # Modal Title
         titleLabel = QLabel(title)
-        titleLabel.setFont(label_font)
+        titleLabel.setFont(QFont(self.activeFont, 16, QFont.Weight.Bold))
         titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        titleLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
+        titleLabel.setStyleSheet(f"color: {self.theme.core_pos_bg.hex2}; border: none; background: transparent;")
         dialogLayout.addWidget(titleLabel)
 
+        # Name Field
         nameLayout = QHBoxLayout()
         nameLabel = QLabel("TASK NAME")
         nameLabel.setFont(label_font)
@@ -447,47 +662,117 @@ class CreateTaskOverlay(QWidget):
         nameLayout.addWidget(self.nameInput)
         dialogLayout.addLayout(nameLayout)
 
+        # Deadline Field
         deadlineLayout = QHBoxLayout()
         deadlineLabel = QLabel("DEADLINE")
         deadlineLabel.setFont(label_font)
         deadlineLabel.setFixedWidth(130)
         deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
-        self.deadlineInput = QDateEdit()
-        self.deadlineInput.setDate(QDate.currentDate())
-        self.deadlineInput.setCalendarPopup(True)
-        self.deadlineInput.setFont(label_font)
-        self.deadlineInput.setStyleSheet(
-            f"QDateEdit {{"
-            f"    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+
+        deadlineWidget = QWidget()
+        deadlineWidget.setStyleSheet("background: transparent; border: none;")
+        deadlineComboLayout = QHBoxLayout(deadlineWidget)
+        deadlineComboLayout.setContentsMargins(0, 0, 0, 0)
+        deadlineComboLayout.setSpacing(10)
+
+        dropdownStyle = (
+            f"QComboBox {{"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    color: {self.theme.core_widgets_gentext}; outline: none;"
+            f"    border: 3px solid {self.theme.core_widgets_border}; border-radius: 10px; padding: 5px 10px;"
+            f"}}"
+            f"QComboBox::drop-down {{"
+            f"    subcontrol-origin: padding;"
+            f"    subcontrol-position: top right;"
+            f"    width: 28px;"
+            f"    border-left: 2px solid {self.theme.core_widgets_border};"
+            f"    border-top-right-radius: 7px;"
+            f"    border-bottom-right-radius: 7px;"
+            f"    background: transparent;"
+            f"}}"
+            f"QComboBox::down-arrow {{"
+            f"    image: none;"
+            f"    border-left: 5px solid transparent;"
+            f"    border-right: 5px solid transparent;"
+            f"    border-top: 6px solid {self.theme.core_widgets_gentext};"
+            f"    margin-right: 2px;"
+            f"}}"
+            f"QComboBox QAbstractItemView {{"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    color: {self.theme.core_widgets_gentext};"
             f"    border: 3px solid {self.theme.core_widgets_border};"
-            f"    border-radius: 10px; padding: 5px; font-size: 12px; color: {self.theme.core_widgets_gentext};"
+            f"    border-radius: 10px;"
+            f"    selection-background-color: {self.theme.core_pos_bg.hex1};"
+            f"    selection-color: {self.theme.core_widgets_btntext};"
+            f"    outline: none;"
+            f"    padding: 4px;"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar:vertical {{"
+            f"    background: {getattr(self.theme, 'scroll_track', '#1a1a1a')};"
+            f"    width: 10px;"
+            f"    margin: 4px 2px 4px 2px;"
+            f"    border-radius: 5px;"
+            f"    border: 1px solid {getattr(self.theme, 'scroll_border', '#333333')};"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar::handle:vertical {{"
+            f"    background: {getattr(self.theme, 'scroll_handle', '#4a4a4a')};"
+            f"    border-radius: 4px;"
+            f"    min-height: 20px;"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {{"
+            f"    background: {getattr(self.theme, 'scroll_handle_hover', '#6a6a6a')};"
+            f"}}"
+            f"QComboBox QAbstractItemView QScrollBar::add-line:vertical, "
+            f"QComboBox QAbstractItemView QScrollBar::sub-line:vertical {{"
+            f"    height: 0px;"
+            f"    background: none;"
             f"}}"
         )
+
+        self.monthDropdown = QComboBox()
+        self.monthDropdown.addItems(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+        self.monthDropdown.setFont(label_font)
+        self.monthDropdown.setStyleSheet(dropdownStyle)
+
+        self.dayDropdown = QComboBox()
+        self.dayDropdown.setFont(label_font)
+        self.dayDropdown.setStyleSheet(dropdownStyle)
+
+        self.yearDropdown = QComboBox()
+        current_year = datetime.date.today().year
+        years = [str(y) for y in range(current_year, current_year + 11)]
+        self.yearDropdown.addItems(years)
+        self.yearDropdown.setFont(label_font)
+        self.yearDropdown.setStyleSheet(dropdownStyle)
+
+        deadlineComboLayout.addWidget(self.monthDropdown, 2)
+        deadlineComboLayout.addWidget(self.dayDropdown, 1)
+        deadlineComboLayout.addWidget(self.yearDropdown, 2)
+
         deadlineLayout.addWidget(deadlineLabel, alignment=Qt.AlignmentFlag.AlignTop)
-        deadlineLayout.addWidget(self.deadlineInput)
+        deadlineLayout.addWidget(deadlineWidget, 1)
         dialogLayout.addLayout(deadlineLayout)
 
+        self.monthDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
+        self.yearDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
+        self.updateDaysInMonth()
+
+        # Priority Field
         weightLayout = QHBoxLayout()
         weightLabel = QLabel("PRIORITY")
         weightLabel.setFont(label_font)
         weightLabel.setFixedWidth(130)
         weightLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
         self.weightInput = QComboBox()
-        self.weightInput.addItems([
-            "LOW_PRIORITY",
-            "MEDIUM_PRIORITY",
-            "HIGH_PRIORITY"
-        ])
+        self.weightInput.addItems(["LOW", "MEDIUM", "HIGH"])
         self.weightInput.setFont(label_font)
-        self.weightInput.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
-            f"color: {self.theme.core_widgets_gentext}; outline: none;"
-            f"border: 3px solid {self.theme.core_widgets_border}; border-radius: 10px; padding: 5px;"
-        )
+        self.weightInput.setStyleSheet(dropdownStyle)
         weightLayout.addWidget(weightLabel)
         weightLayout.addWidget(self.weightInput)
         dialogLayout.addLayout(weightLayout)
+        dialogLayout.addStretch()
 
+        # Action Buttons
         bottomBtnLayout = QHBoxLayout()
         bottomBtnLayout.setSpacing(20)
         
@@ -520,6 +805,87 @@ class CreateTaskOverlay(QWidget):
         if self.fadeInAnim:
             self.fadeInAnim.start()
 
+    def updateDaysInMonth(self):
+        try:
+            month_idx = self.monthDropdown.currentIndex() + 1
+            year = int(self.yearDropdown.currentText())
+            _, num_days = calendar.monthrange(year, month_idx)
+            
+            current_day = self.dayDropdown.currentText()
+            self.dayDropdown.blockSignals(True)
+            self.dayDropdown.clear()
+            day_items = [str(d) for d in range(1, num_days + 1)]
+            self.dayDropdown.addItems(day_items)
+            
+            if current_day in day_items:
+                self.dayDropdown.setCurrentText(current_day)
+            else:
+                self.dayDropdown.setCurrentIndex(min(len(day_items) - 1, int(current_day) - 1 if current_day.isdigit() else 0))
+            self.dayDropdown.blockSignals(False)
+        except Exception:
+            pass
+
+    def set_initial_date(self, deadline_str):
+        if not deadline_str or deadline_str == "No Deadline":
+            return
+        dt = None
+        try:
+            dt = datetime.date.fromisoformat(deadline_str)
+        except ValueError:
+            pass
+        if not dt:
+            try:
+                dt = datetime.datetime.strptime(deadline_str, "%b %d %Y").date()
+            except ValueError:
+                pass
+        if not dt:
+            try:
+                parts = deadline_str.split('/')
+                if len(parts) == 3:
+                    dt = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+            except Exception:
+                pass
+
+        if dt:
+            month_abbr = dt.strftime("%b")
+            day_str = str(dt.day)
+            year_str = str(dt.year)
+
+            idx = self.monthDropdown.findText(month_abbr)
+            if idx >= 0:
+                self.monthDropdown.setCurrentIndex(idx)
+            idx = self.yearDropdown.findText(year_str)
+            if idx >= 0:
+                self.yearDropdown.setCurrentIndex(idx)
+            
+            self.updateDaysInMonth()
+            
+            idx = self.dayDropdown.findText(day_str)
+            if idx >= 0:
+                self.dayDropdown.setCurrentIndex(idx)
+
+    def get_deadline_values(self):
+        month_str = self.monthDropdown.currentText()
+        day_str = self.dayDropdown.currentText()
+        year_str = self.yearDropdown.currentText()
+        
+        month_map = {"Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, 
+                     "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12}
+        month_num = month_map.get(month_str, 1)
+        day_num = int(day_str) if day_str.isdigit() else 1
+        year_num = int(year_str) if year_str.isdigit() else datetime.date.today().year
+
+        try:
+            dt_obj = datetime.date(year_num, month_num, day_num)
+            readable_deadline = dt_obj.strftime("%b %d %Y")
+            iso_deadline = dt_obj.isoformat()
+        except ValueError:
+            dt_obj = datetime.date.today()
+            readable_deadline = dt_obj.strftime("%b %d %Y")
+            iso_deadline = dt_obj.isoformat()
+
+        return readable_deadline, iso_deadline, dt_obj
+
     def updateDialogPosition(self):
         parent_rect = self.parent().rect() if self.parent() else self.rect()
         box_x = (parent_rect.width() - self.dialogBox.width()) // 2
@@ -544,7 +910,13 @@ class CreateTaskOverlay(QWidget):
         if self.is_submitting:
             return
         name = self.nameInput.text().strip()
-        deadline = self.deadlineInput.text().strip()
+        readable_deadline, iso_deadline, dt_obj = self.get_deadline_values()
+
+        if dt_obj < datetime.date.today():
+            QMessageBox.warning(self, "Invalid Deadline", "The deadline cannot be set to a date before the current date.")
+            return
+
+        deadline = iso_deadline
         weight_str = self.weightInput.currentText()
         try:
             weight = Weight[weight_str]
@@ -574,18 +946,16 @@ class CreateTaskOverlay(QWidget):
 
 
 class EditTaskOverlay(CreateTaskOverlay):
-    """Modal for editing task name and deadline"""
-    def __init__(self, parent=None, animator=None, activeFont=None, task_instance=None, on_save_callback=None, controller=None):
+    """Modal for editing task name, deadline, and priority"""
+    def __init__(self, parent=None, animator=None, activeFont=None, title="EDIT TASK", task_instance=None, on_save_callback=None, controller=None):
         self.task_instance = task_instance
         self.on_save_callback = on_save_callback
-        super().__init__(parent=parent, animator=animator, activeFont=activeFont, title="EDIT TASK", on_create_callback=None, controller=controller)
+        super().__init__(parent=parent, animator=animator, activeFont=activeFont, title=title, on_create_callback=None, controller=controller)
         
         if self.task_instance:
             self.nameInput.setText(self.task_instance.name)
             if hasattr(self.task_instance, 'deadline') and self.task_instance.deadline:
-                parsed_date = QDate.fromString(self.task_instance.deadline, "yyyy-MM-dd")
-                if parsed_date.isValid():
-                    self.deadlineInput.setDate(parsed_date)
+                self.set_initial_date(self.task_instance.deadline)
             if hasattr(self.task_instance, 'weight') and isinstance(self.task_instance.weight, Weight):
                 index = self.weightInput.findText(self.task_instance.weight.name)
                 if index >= 0:
@@ -596,7 +966,13 @@ class EditTaskOverlay(CreateTaskOverlay):
         if self.is_submitting:
             return
         name = self.nameInput.text().strip()
-        deadline = self.deadlineInput.text().strip()
+        readable_deadline, iso_deadline, dt_obj = self.get_deadline_values()
+
+        if dt_obj < datetime.date.today():
+            QMessageBox.warning(self, "Invalid Deadline", "The deadline cannot be set to a date before the current date.")
+            return
+
+        deadline = iso_deadline
         weight_str = self.weightInput.currentText()
         try:
             weight = Weight[weight_str]
@@ -768,7 +1144,7 @@ class ProjectDetailPage(QWidget):
 
         headerWidget = QWidget()
         headerWidget.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.theme.core_bg_widgets.hex1}, stop:1 {self.theme.core_bg_widgets.hex2});"
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.theme.core_tertiary_bg.hex1}, stop:1 {self.theme.core_tertiary_bg.hex2});"
             f"border: 3px solid {self.theme.core_widgets_border}; border-radius: 15px;"
         )
         headerLayout = QVBoxLayout(headerWidget)
@@ -808,7 +1184,8 @@ class ProjectDetailPage(QWidget):
         self.descLbl.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; border: none; background: transparent;")
 
         deadline_str = getattr(self.project, 'deadline', "No Deadline")
-        self.deadlineLabel = QLabel(f"Deadline: {deadline_str}")
+        readable_deadline = parse_deadline_to_readable(deadline_str)
+        self.deadlineLabel = QLabel(f"Deadline: {readable_deadline}")
         self.deadlineLabel.setFont(QFont(self.activeFont, 10, QFont.Weight.Bold))
         self.deadlineLabel.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
         
@@ -818,68 +1195,58 @@ class ProjectDetailPage(QWidget):
         headerDetailsLayout.addWidget(headerIcon)
         headerDetailsLayout.addLayout(textColLayout, 1)
 
-
         # Edit & Delete Buttons
         headerBtnLayout = QVBoxLayout()
         headerBtnLayout.setSpacing(8)
 
-        btnProjEdit = HoverButton("", parent=headerWidget, animator=self.controller.animator)
-        btnProjEdit.setFixedSize(36, 36)
-        edit_icon_path = get_resolved_icon_path("icon_project_edit.png")
-        if edit_icon_path and os.path.exists(edit_icon_path):
-            pm = QPixmap(edit_icon_path).scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            tinted_pm = tint_pixmap(pm, QColor(self.theme.core_widgets_gentext))
-            btnProjEdit.setIcon(QIcon(tinted_pm))
-        btnProjEdit.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_pos_bg.hex1}, stop:0.8 {self.theme.core_pos_bg.hex2});"
-            f"border: 2px solid {self.theme.core_pos_border};"
-            "border-radius: 8px;"
-        )
-        btnProjEdit.setHoverData(["border"], [self.theme.core_pos_border], [self.theme.core_pos_border_hover])
-        btnProjEdit.clicked.connect(self.editProjectPrompt)
+        btnEdit = EditIconButton(parent=headerWidget, animator=self.controller.animator)
+        btnEdit.setFixedSize(36, 36)
+        btnEdit.clicked.connect(self.editProjectPrompt)
 
-        btnProjDel = HoverButton("", parent=headerWidget, animator=self.controller.animator)
-        btnProjDel.setFixedSize(36, 36)
-        delete_icon_path = get_resolved_icon_path("icon_project_delete.png")
-        if delete_icon_path and os.path.exists(delete_icon_path):
-            pm = QPixmap(delete_icon_path).scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            tinted_pm = tint_pixmap(pm, QColor(self.theme.core_widgets_gentext))
-            btnProjDel.setIcon(QIcon(tinted_pm))
-        btnProjDel.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_neg_bg.hex1}, stop:0.8 {self.theme.core_neg_bg.hex2});"
-            f"border: 2px solid {self.theme.core_neg_border};"
-            "border-radius: 8px;"
-        )
-        btnProjDel.setHoverData(["border"], [self.theme.core_neg_border], [self.theme.core_neg_border_hover])
-        btnProjDel.clicked.connect(self.deleteProjectPrompt)
+        btnDelete = DeleteIconButton(parent=headerWidget, animator=self.controller.animator)
+        btnDelete.setFixedSize(36, 36)
+        btnDelete.clicked.connect(self.deleteProjectPrompt)
 
-        headerBtnLayout.addWidget(btnProjEdit)
-        headerBtnLayout.addWidget(btnProjDel)
+        btnArchive = ArchiveIconButton(parent=headerWidget, animator=self.controller.animator)
+        btnArchive.setFixedSize(36, 36)
+        btnArchive.clicked.connect(self.archiveProjectPrompt)
+
+        headerBtnLayout.addWidget(btnEdit)
+        headerBtnLayout.addWidget(btnArchive)
+        headerBtnLayout.addWidget(btnDelete)
         headerDetailsLayout.addLayout(headerBtnLayout)
         headerLayout.addLayout(headerDetailsLayout)
         pageLayout.addWidget(headerWidget)
 
         # Progress Details
         progDetails = QHBoxLayout()
+        progDetails.setSpacing(15)
+        
+        percentValue = int(getattr(self.project, 'progress', 0.0))
+        self.headerPercentLabel = QLabel(f"{percentValue}%")
+        self.headerPercentLabel.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
+        self.headerPercentLabel.setFixedWidth(64)
+        self.headerPercentLabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.headerPercentLabel.setStyleSheet(
+            f"color: {self.theme.project_text if percentValue < 100 else self.theme.core_pos_bg.hex2};"
+            "background: transparent; border: none;"
+        )
+
         self.headerProgBar = QProgressBar()
         self.headerProgBar.setRange(0, 100)
-        self.headerProgBar.setValue(int(getattr(self.project, 'progress', 0.0)))
+        self.headerProgBar.setValue(0)
+        animate_progress_bar(self.headerProgBar, percentValue, duration=400)
         self.headerProgBar.setTextVisible(False)
         self.headerProgBar.setFixedHeight(10)
         self.headerProgBar.setStyleSheet(
             "QProgressBar {"
             f"border: 2px solid {self.theme.core_widgets_border}; border-radius: 4px; background-color: {self.theme.core_widgets_border};"
             "}"
-            "QProgressBar::chunk { "
+            "QProgressBar::chunk {"
             f"background: qlineargradient(x1:0, y:0.5, x2:1, y2:0.5, stop:0.2 {self.theme.project_progress.hex1}, stop:0.9 {self.theme.project_progress.hex2});"
             "   border-radius: 2px; }"
         )
         
-        percentValue = int(getattr(self.project, 'progress', 0.0))
-        self.headerPercentLabel = QLabel(f"{percentValue}%")
-        self.headerPercentLabel.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
-        self.headerPercentLabel.setStyleSheet(f"color: {self.theme.project_text}; background: transparent; border: none;")
-
         progDetails.addWidget(self.headerPercentLabel)
         progDetails.addWidget(self.headerProgBar)
         headerLayout.addLayout(progDetails)
@@ -908,24 +1275,46 @@ class ProjectDetailPage(QWidget):
         tasksHeaderRow.addStretch()
         pageLayout.addLayout(tasksHeaderRow)
 
-        # Project Actions (Bottom Button Row)
-        projectActionsContainer = QWidget(self)
-        projectActionsContainer.setStyleSheet("background: transparent; border: none;")
-        projectActionsLayout = QHBoxLayout(projectActionsContainer)
+        # Task List Container with custom styling & custom scrollbar inside darkened box
+        tasksContainerWidget = QWidget(self)
+        tasksContainerWidget.setStyleSheet(
+            f"background-color: {self.theme.core_bg_lists if self.theme.core_bg_lists else 'rgba(10, 10, 10, 0.5)'};"
+            f"border: none; border-radius: 20px;"
+        )
+        tasksContainerLayout = QHBoxLayout(tasksContainerWidget)
+        tasksContainerLayout.setContentsMargins(8, 8, 8, 8)
+        tasksContainerLayout.setSpacing(4)
 
-        self.scroll = QScrollArea()
+        self.scroll = QScrollArea(tasksContainerWidget)
         self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setStyleSheet("background: transparent; border: none;")
         
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
         self.contentWidget = QWidget()
-        self.contentWidget.setStyleSheet("background: transparent;")
+        self.contentWidget.setStyleSheet("background: transparent; border: none;")
         self.contentLayout = QVBoxLayout(self.contentWidget)
         self.contentLayout.setSpacing(12)
+        self.contentLayout.setContentsMargins(10, 10, 10, 10)
 
         self.populateTasksList()
 
         self.scroll.setWidget(self.contentWidget)
-        pageLayout.addWidget(self.scroll, 1)
+        
+        v_bar = RoundedScrollBar(Qt.Orientation.Vertical, self.scroll, controller=self.controller)
+        v_bar.setFixedWidth(16)
+        self.scroll.setVerticalScrollBar(v_bar)
+
+        tasksContainerLayout.addWidget(self.scroll)
+        tasksContainerLayout.addWidget(v_bar)
+        pageLayout.addWidget(tasksContainerWidget, 1)
+
+        # Project Actions (Bottom Button Row)
+        projectActionsContainer = QWidget(self)
+        projectActionsContainer.setStyleSheet("background: transparent; border: none;")
+        projectActionsLayout = QHBoxLayout(projectActionsContainer)
         pageLayout.addWidget(projectActionsContainer)
 
         # Project Action Buttons
@@ -934,43 +1323,14 @@ class ProjectDetailPage(QWidget):
         self.btnBack.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
         self.btnBack.setFixedHeight(45)
         self.btnBack.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_neutral_bg.hex1}, stop:1 {self.theme.core_neutral_bg.hex2});"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_pos_bg.hex1}, stop:1 {self.theme.core_pos_bg.hex2});"
             f"color: {self.theme.core_widgets_btntext};"
-            f"border: 3px solid {self.theme.core_neutral_border}; border-radius: 18px;"
+            f"border: 3px solid {self.theme.core_pos_border}; border-radius: 18px;"
             f"outline: none;"
         )
         self.btnBack.setHoverData(["border"], [self.theme.core_neutral_border], [self.theme.core_neutral_border_hover])
         self.btnBack.clicked.connect(self.controller.returnToProjects)
-
-        self.btnArchive = HoverButton("ARCHIVE PROJECT", parent=self, animator=self.controller.animator)
-        self.btnArchive.setObjectName("archiveProject")
-        self.btnArchive.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
-        self.btnArchive.setFixedHeight(45)
-        self.btnArchive.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_neutral_bg.hex1}, stop:1 {self.theme.core_neutral_bg.hex2});"
-            f"color: {self.theme.core_widgets_btntext};"
-            f"border: 3px solid {self.theme.core_neutral_border}; border-radius: 18px;"
-            f"outline: none;"
-        )
-        self.btnArchive.setHoverData(["border"], [self.theme.core_neutral_border], [self.theme.core_neutral_border_hover])
-        self.btnArchive.clicked.connect(self.archiveProjectPrompt)
-
-        self.btnDelete = HoverButton("DELETE PROJECT", parent=self, animator=self.controller.animator)
-        self.btnDelete.setObjectName("deleteProject")
-        self.btnDelete.setFont(QFont(self.activeFont, 14, QFont.Weight.Bold))
-        self.btnDelete.setFixedHeight(45)
-        self.btnDelete.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_neg_bg.hex1}, stop:1 {self.theme.core_neg_bg.hex2});"
-            f"color: {self.theme.core_widgets_btntext};"
-            f"border: 3px solid {self.theme.core_neg_border}; border-radius: 18px;"
-            f"outline: none;"
-        )
-        self.btnDelete.setHoverData(["border"], [self.theme.core_neg_border], [self.theme.core_neg_border_hover])
-        self.btnDelete.clicked.connect(self.deleteProjectPrompt)
-
         projectActionsLayout.addWidget(self.btnBack)
-        projectActionsLayout.addWidget(self.btnArchive)
-        projectActionsLayout.addWidget(self.btnDelete)
 
     def populateTasksList(self):
         """Fills the Tasks list with data pulled from projects.json"""
@@ -1012,8 +1372,6 @@ class ProjectDetailPage(QWidget):
                 task_widget = t_obj.newDisplayWidget(self.contentWidget, on_update_callback=self.saveAndRefreshTasks)
                 self.contentLayout.addWidget(task_widget)
 
-        self.contentLayout.addStretch()
-
     def createNewTask(self):
         self.controller.is_modal_active = True
         CreateTaskOverlay(
@@ -1045,10 +1403,10 @@ class ProjectDetailPage(QWidget):
             self.project.tasks = []
         self.project.tasks.append(new_task)
 
-        self.saveAndRefreshTasks()
+        self.saveAndRefreshTasks(refresh_list=True)
 
-    def saveAndRefreshTasks(self):
-        """Saves Tasks data to projects.json & refreshes the UI to reflect changes"""
+    def saveAndRefreshTasks(self, refresh_list=False):
+        """Saves Tasks data to projects.json & refreshes UI to reflect changes"""
         # Recalculate progress
         for t in self.project.tasks:
             if hasattr(t, 'subtasks') and t.subtasks:
@@ -1058,9 +1416,22 @@ class ProjectDetailPage(QWidget):
         # Update header progress bar and label
         new_progress_int = int(self.project.progress)
         if hasattr(self, 'headerProgBar') and self.headerProgBar:
-            self.headerProgBar.setValue(new_progress_int)
+            animate_progress_bar(self.headerProgBar, new_progress_int, duration=300)
+
         if hasattr(self, 'headerPercentLabel') and self.headerPercentLabel:
             self.headerPercentLabel.setText(f"{new_progress_int}%")
+            target_col = self.theme.core_pos_bg.hex2 if new_progress_int >= 100 else self.theme.core_widgets_gentext
+            if self.controller.animator and new_progress_int >= 100:
+                txt_anim = self.controller.animator.createAnimation(
+                    self.headerPercentLabel, "text", 
+                    self.theme.core_widgets_gentext, 
+                    self.theme.core_pos_bg.hex2, 
+                    duration=300
+                )
+                if txt_anim:
+                    txt_anim.start()
+                    self._header_txt_anim = txt_anim
+            self.headerPercentLabel.setStyleSheet(f"color: {target_col}; background: transparent; border: none;")
 
         all_projects = load_projects_from_json()
         for p in all_projects:
@@ -1070,7 +1441,17 @@ class ProjectDetailPage(QWidget):
                 p.status = self.project.status
                 break
         save_projects_to_json(all_projects)
-        self.populateTasksList()
+
+        if refresh_list:
+            self.populateTasksList()
+        else:
+            # Update existing task widgets in place
+            for i in range(self.contentLayout.count()):
+                item = self.contentLayout.itemAt(i)
+                if item and item.widget():
+                    w = item.widget()
+                    if hasattr(w, 'update_subtask_progress_ui'):
+                        w.update_subtask_progress_ui()
 
     def editProjectPrompt(self):
         self.controller.is_modal_active = True
@@ -1101,6 +1482,9 @@ class ProjectDetailPage(QWidget):
 
         self.titleLbl.setText(name)
         self.descLbl.setText(desc)
+        
+        readable_deadline = parse_deadline_to_readable(deadline)
+        self.deadlineLabel.setText(f"Deadline: {readable_deadline}")
 
     def archiveProjectPrompt(self):
         self.controller.is_modal_active = True

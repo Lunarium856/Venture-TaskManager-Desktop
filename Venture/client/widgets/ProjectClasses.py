@@ -16,7 +16,7 @@ class Weight(enum.Enum):
     HIGH_PRIORITY = 3
 
 class Project:
-    def __init__(self, projectID: int, name: str, desc: str, time_create: str, time_elapsed: str, last_update: str, tasks: list, tags: list[QObject], icon, progress: float, deadline, status=Status.NOT_STARTED):
+    def __init__(self, projectID: int, name: str, desc: str, time_create: str, time_elapsed: str, last_update: str, tasks: list, tags: list[QObject], icon, progress: float, deadline, status=Status.NOT_STARTED, time_start: str = ""):
         self.maxLenName = 25
         self.maxLenDesc = 218
         
@@ -32,12 +32,14 @@ class Project:
             self.time_create = time_create
 
         self.time_elapsed = time_elapsed
+        self.time_start = time_start
         self.last_update = last_update
         self.tasks = tasks if tasks is not None else []
         self.tags = tags if tags is not None else []
         self.icon = icon if icon else ""
         self.progress = progress
         self.deadline = deadline
+        self.controller_ref = None
 
         if isinstance(status, Status):
             self.status = status
@@ -48,17 +50,26 @@ class Project:
                 self.status = Status.NOT_STARTED
         else:
             self.status = Status.NOT_STARTED
-            
-        self.controller_ref = None
 
     def update_elapsed_time(self):
-        """Calculates current elapsed time from time_create to now, '#d #h #m' format"""
-        if not self.time_create:
-            self.time_create = datetime.datetime.now().isoformat()
+        """Calculates current elapsed time from time_start only when in progress, '#d #h #m' format"""
+        if self.status != Status.IN_PROGRESS:
+            if self.status == Status.NOT_STARTED:
+                self.time_elapsed = "0d 0h 0m"
+                return
+            elif self.status == Status.FINISHED:
+                if not self.time_start:
+                    self.time_elapsed = "0d 0h 0m"
+                return
+
+        if not self.time_start: # Fallback for projects that dont have a time_start
+            self.time_start = datetime.datetime.now().isoformat()
+            return
+
         try:
-            create_dt = datetime.datetime.fromisoformat(self.time_create)
+            start_dt = datetime.datetime.fromisoformat(self.time_start)
             current_dt = datetime.datetime.now()
-            diff = current_dt - create_dt
+            diff = current_dt - start_dt
             
             if diff.total_seconds() < 0:
                 self.time_elapsed = "0d 0h 0m"
@@ -72,38 +83,39 @@ class Project:
             self.time_elapsed = "0d 0h 0m"
 
     def newDisplayWidget(self, parent: QObject=None):
+        """Creates a new ProjectCardWidget."""
         return ProjectCardWidget(self, parent)
 
     def recalculate_progress(self):
         """Calculates project progress based on task weights and completion rules."""
+        # Check if tasks exist
         tasks = getattr(self, 'tasks', [])
         if not tasks:
             self.progress = 0.0
             self.status = Status.NOT_STARTED
             return
 
+        # Calculate
         total_weight_units = 0.0
         completed_weight_units = 0.0
 
         for t in tasks:
-            # Handle tasks as objects or dicts if unparsed
             t_weight = t.weight.value if hasattr(t.weight, 'value') else int(t.weight)
             total_weight_units += t_weight
 
             subtasks = getattr(t, 'subtasks', [])
-            if subtasks: # Completion percentage mapped to float between 0 and 3
+            if subtasks:
                 sub_total_w = sum((sub.weight.value if hasattr(sub.weight, 'value') else int(sub.weight)) for sub in subtasks)
                 sub_done_w = sum((sub.weight.value if hasattr(sub.weight, 'value') else int(sub.weight)) for sub in subtasks if getattr(sub, 'status', False))
                 
                 sub_ratio = (sub_done_w / sub_total_w) if sub_total_w > 0 else 0.0
-                task_normalized_contribution = sub_ratio * 3.0  # normalized float between 0 to 3
+                task_normalized_contribution = sub_ratio * 3.0
                 
-                # Update task status/progress property for UI consistency
                 t.progress = sub_ratio * 100.0
                 t.status = (sub_ratio >= 1.0)
                 
                 completed_weight_units += (task_normalized_contribution / 3.0) * t_weight
-            else: # Standard task without subtasks
+            else:
                 is_done = bool(getattr(t, 'status', False))
                 t.progress = 100.0 if is_done else 0.0
                 if is_done:
@@ -120,9 +132,12 @@ class Project:
         elif self.progress > 0.0:
             self.status = Status.IN_PROGRESS
         else:
-            # Check if any task has started
             any_started = any(bool(getattr(t, 'status', False)) or float(getattr(t, 'progress', 0.0)) > 0.0 for t in tasks)
             self.status = Status.IN_PROGRESS if any_started else Status.NOT_STARTED
+
+        # Record start timestamp when status changes to "In Progress" for the first time
+        if self.status == Status.IN_PROGRESS and not self.time_start:
+            self.time_start = datetime.datetime.now().isoformat()
 
     def projectClicked(self):
         if self.controller_ref:
@@ -148,7 +163,6 @@ class Task:
         self.status = status
         self.tags = tags if tags is not None else []
         
-        # Ensure subtasks are Subtask instances
         parsed_subtasks = []
         for sub in (subtasks if subtasks is not None else []):
             if isinstance(sub, dict):
@@ -172,11 +186,10 @@ class Task:
 
     def newDisplayWidget(self, parent: QObject=None, on_update_callback=None):
         widget = TaskCardWidget(self, parent, on_update_callback)
-        self.widget_ref = widget  # TaskCardWdiget reference storage
+        self.widget_ref = widget
         return widget
 
     def recalculate_task_progress(self):
-        """Calculates task progress when it has subtasks."""
         subtasks = getattr(self, 'subtasks', [])
         if not subtasks:
             return
@@ -186,10 +199,8 @@ class Task:
 
         sub_ratio = (sub_done_w / sub_total_w) if sub_total_w > 0 else 0.0
         self.progress = sub_ratio * 100.0
+        self.status = (sub_ratio >= 1.0)
         
-        self.status = (sub_ratio >= 1.0) # Task is complete when all its subtasks are done
-        
-        # Trigger OnCheckboxChanged to play the bg transition
         if hasattr(self, 'widget_ref') and self.widget_ref:
             if hasattr(self.widget_ref, 'update_status_visuals'):
                 self.widget_ref.update_status_visuals(self.status)

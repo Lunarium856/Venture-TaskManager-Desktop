@@ -15,6 +15,7 @@ if not os.path.exists(data_dir):
 
 projects_json_path = os.path.join(data_dir, "projects.json")
 
+# JSON Handling
 def load_projects_from_json():
     """Loads projects from projects.json"""
     if not os.path.exists(projects_json_path):
@@ -103,8 +104,11 @@ def load_projects_from_json():
                     icon=item["icon"],
                     progress=item["progress"],
                     deadline=item["deadline"],
-                    status=proj_status
+                    status=proj_status,
+                    time_start=item.get("time_start", "")
                 )
+                if proj.status == Status.IN_PROGRESS and not proj.time_start:
+                    proj.time_start = proj.time_create
                 proj.is_archived = item.get("is_archived", False)
                 projects.append(proj)
             return projects
@@ -167,6 +171,7 @@ def save_projects_to_json(projects_list):
             "desc": proj.desc,
             "time_create": proj.time_create,
             "time_elapsed": getattr(proj, "time_elapsed", "0d 0h 0m"),
+            "time_start": getattr(proj, "time_start", ""),
             "last_update": proj.last_update,
             "tasks": tasks_data,
             "tags": tags_data,
@@ -183,6 +188,7 @@ def save_projects_to_json(projects_list):
     except IOError as e:
         print(f"Error saving projects: {e}")
 
+# Helper Funcs
 def parse_deadline_to_readable(deadline_str):
     """Converts ISO or legacy deadline strings into a readable format like 'Feb 15 2027'."""
     if not deadline_str or deadline_str == "No Deadline":
@@ -206,7 +212,7 @@ def parse_deadline_to_readable(deadline_str):
         pass
     return deadline_str
 
-
+# Modal Overlays
 class CreateProjectOverlay(QWidget):
     """Modal overlay for creating projects"""
     def __init__(self, parent=None, animator=None, activeFont=None, on_create_callback=None, controller=None):
@@ -564,7 +570,6 @@ class CreateProjectOverlay(QWidget):
         if self.controller:
             self.controller.is_modal_active = False
 
-
 class EditProjectOverlay(CreateProjectOverlay):
     """Modal for editing project name, deadline, and description"""
     def __init__(self, parent=None, animator=None, activeFont=None, project_instance=None, on_save_callback=None, controller=None):
@@ -596,7 +601,6 @@ class EditProjectOverlay(CreateProjectOverlay):
             self.on_save_callback(name, deadline, desc)
             QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
         self.closeOverlay()
-
 
 class CreateTaskOverlay(QWidget):
     """Modal overlay for creating a new task with name, priority, and dropdown deadline fields"""
@@ -955,7 +959,6 @@ class CreateTaskOverlay(QWidget):
         if self.controller:
             self.controller.is_modal_active = False
 
-
 class EditTaskOverlay(CreateTaskOverlay):
     """Modal for editing task name, deadline, and priority"""
     def __init__(self, parent=None, animator=None, activeFont=None, title="EDIT TASK", is_subtask=False, task_instance=None, on_save_callback=None, controller=None):
@@ -995,7 +998,6 @@ class EditTaskOverlay(CreateTaskOverlay):
             self.on_save_callback(name, deadline, weight)
             QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
         self.closeOverlay()
-
 
 class ConfirmActionOverlay(QWidget):
     """Reusable modal overlay for action confirmations"""
@@ -1125,7 +1127,7 @@ class ConfirmActionOverlay(QWidget):
         if self.controller:
             self.controller.is_modal_active = False
 
-
+# Project Displays
 class ProjectDetailPage(QWidget):
     """Detailed view for a specific project"""
     def __init__(self, controller, project):
@@ -1538,7 +1540,6 @@ class ProjectDetailPage(QWidget):
         save_projects_to_json(all_projects)
         self.controller.returnToProjects()
 
-
 class ProjectListPage(QWidget):
     """Main Project Listing View"""
     def __init__(self, controller):
@@ -1646,19 +1647,55 @@ class ProjectListPage(QWidget):
         bottomBarLayout = QHBoxLayout()
         bottomBarLayout.setContentsMargins(5, 0, 5, 0)
 
+        # Searchbar
         self.searchBar = QLineEdit(self)
-        self.searchBar.setPlaceholderText("🔍 SEARCH...")
+        self.searchBar.setPlaceholderText("SEARCH...")
         self.searchBar.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
         self.searchBar.setFixedHeight(35); self.searchBar.setFixedWidth(280)
         self.searchBar.setStyleSheet(
             f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {self.theme.core_bg_side.hex1}, stop:1 {self.theme.core_bg_side.hex2});"
             f"color: {self.theme.core_widgets_gentext};"
             f"border: 2px solid {self.theme.core_widgets_border};"
-            f"border-radius: 12px; padding-left: 10px;"
+            f"border-radius: 12px; padding-left: 8px;"  # padding for icon space
         )
 
+        search_icon_path = get_resolved_icon_path("icon_core_search.png")
+        if search_icon_path and os.path.exists(search_icon_path):
+            pm = QPixmap(search_icon_path).scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            tinted_pm = tint_pixmap(pm, QColor(self.theme.core_widgets_gentext))
+            search_action = QAction(QIcon(tinted_pm), "", self.searchBar)
+            self.searchBar.addAction(search_action, QLineEdit.ActionPosition.LeadingPosition)
+
+        # Sort Button
+        self.btnSort = HoverButton("SORT BY ▾", self, self.animator)
+        self.btnSort.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btnSort.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
+        self.btnSort.setFixedHeight(35); self.btnSort.setFixedWidth(150)
+        self.btnSort.setStyleSheet(
+            f"color: {self.theme.core_widgets_btntext}; border: 2px solid {self.theme.core_pos_border}; outline: none; border-radius: 12px; text-align: center;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_pos_bg.hex1}, stop:1 {self.theme.core_pos_bg.hex2});"
+        )
+        self.btnSort.setHoverData(["border"], [self.theme.core_pos_border], [self.theme.core_pos_border_hover])
+        self.btnSort.clicked.connect(self.showSortMenu)
+
+        # Ascending/Descending Toggle Button
+        self.is_ascending = True
+        self.btnOrder = HoverButton(" ↑ ", self, self.animator)
+        self.btnOrder.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btnOrder.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
+        self.btnOrder.setFixedHeight(35); self.btnOrder.setFixedWidth(40)
+        self.btnOrder.setStyleSheet(
+            f"color: {self.theme.core_widgets_btntext}; border: 2px solid {self.theme.core_pos_border}; outline: none; border-radius: 12px; text-align: center;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_pos_bg.hex1}, stop:1 {self.theme.core_pos_bg.hex2});"
+        )
+        self.btnOrder.setHoverData(["border"], [self.theme.core_pos_border], [self.theme.core_pos_border_hover])
+        self.btnOrder.clicked.connect(self.toggleSortOrder)
+
+        # Assemble Bottom Bar
         bottomBarLayout.addWidget(self.searchBar)
-        bottomBarLayout.addStretch()
+        bottomBarLayout.addStretch()      
+        bottomBarLayout.addWidget(self.btnSort)
+        bottomBarLayout.addWidget(self.btnOrder)
 
         self.mainContentLayout.addLayout(self.topActionBarLayout)
         self.mainContentLayout.addWidget(self.gridContainerWidget, 1)
@@ -1753,19 +1790,14 @@ class ProjectListPage(QWidget):
 
     def onNewProjectCreated(self, name, deadline, desc):
         create_dt = datetime.datetime.now()
-        current_dt = datetime.datetime.now()
-        diff = current_dt - create_dt
-        days = diff.days
-        hours = diff.seconds // 3600
-        minutes = (diff.seconds % 3600) // 60
-        time_elapsed_str = f"{days}d {hours}h {minutes}m"
 
         new_proj = Project(
             projectID=int(time.time()),
             name=name,
             desc=desc if desc else "No description provided.",
             time_create=create_dt.isoformat(),
-            time_elapsed=time_elapsed_str,
+            time_elapsed="0d 0h 0m",
+            time_start="",
             last_update=datetime.datetime.now().isoformat(),
             tasks=[],
             tags=[],
@@ -1780,3 +1812,156 @@ class ProjectListPage(QWidget):
         all_projects.append(new_proj)
         save_projects_to_json(all_projects)
         self.populateGrid()
+
+    def showSortMenu(self):
+        """Displays a popup menu with sorting criteria options."""
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu {{"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    color: {self.theme.core_widgets_gentext};"
+            f"    border: 2px solid {self.theme.core_widgets_border};"
+            f"    border-radius: 10px;"
+            f"    padding: 5px;"
+            f"}}"
+            f"QMenu::item {{"
+            f"    padding: 6px 20px;"
+            f"    border-radius: 6px;"
+            f"}}"
+            f"QMenu::item:selected {{"
+            f"    background-color: {self.theme.core_pos_bg.hex1};"
+            f"    color: {self.theme.core_widgets_btntext};"
+            f"}}"
+        )
+
+        action_name = menu.addAction("Alphabetical (A-Z)")
+        action_deadline = menu.addAction("Deadline")
+        action_progress = menu.addAction("Progress")
+        action_status = menu.addAction("Status")
+
+        # Position menu right above/below the sort button
+        btn_pos = self.btnSort.mapToGlobal(QPoint(0, -135))
+        selected_action = menu.exec(btn_pos)
+
+        if selected_action == action_name:
+            self.sortProjects("name")
+        elif selected_action == action_deadline:
+            self.sortProjects("deadline")
+        elif selected_action == action_progress:
+            self.sortProjects("progress")
+        elif selected_action == action_status:
+            self.sortProjects("status")
+
+    def toggleSortOrder(self):
+        """Toggles between ascending and descending sort order using the exact same gradient animation pattern as subtask cards."""
+        self.is_ascending = not self.is_ascending
+        self.btnOrder.setText(" ↑ " if self.is_ascending else " ↓ ")
+
+        # Define color states (Positive when ascending, Neutral when descending)
+        if self.is_ascending:
+            start_bg1 = self.theme.core_neg_bg.hex1
+            end_bg1 = self.theme.core_pos_bg.hex1
+            start_bg2 = self.theme.core_neg_bg.hex2
+            end_bg2 = self.theme.core_pos_bg.hex2
+            border_col = self.theme.core_pos_border
+        else:
+            start_bg1 = self.theme.core_pos_bg.hex1
+            end_bg1 = self.theme.core_neg_bg.hex1
+            start_bg2 = self.theme.core_pos_bg.hex2
+            end_bg2 = self.theme.core_neg_bg.hex2
+            border_col = self.theme.core_widgets_border
+
+        # Initialize color tracking attributes on the button (exact subtask pattern)
+        self.btnOrder._anim_col1 = QColor(start_bg1)
+        self.btnOrder._anim_col2 = QColor(start_bg2)
+
+        def update_button_gradient():
+            try:
+                c1 = self.btnOrder._anim_col1.name() if isinstance(self.btnOrder._anim_col1, QColor) else str(self.btnOrder._anim_col1)
+                c2 = self.btnOrder._anim_col2.name() if isinstance(self.btnOrder._anim_col2, QColor) else str(self.btnOrder._anim_col2)
+                grad_str = f"qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c1}, stop:1 {c2})"
+                
+                self.btnOrder.setStyleSheet(
+                    f"color: {self.theme.core_widgets_btntext};"
+                    f"border: 2px solid {border_col};"
+                    f"outline: none; border-radius: 12px; text-align: center;"
+                    f"background: {grad_str};"
+                )
+            except RuntimeError:
+                return
+
+        # Dual QVariantAnimations for the two gradient stops
+        self.btnOrder._bg_anim1 = QVariantAnimation(self.btnOrder)
+        self.btnOrder._bg_anim1.setDuration(200)
+        self.btnOrder._bg_anim1.setStartValue(QColor(start_bg1))
+        self.btnOrder._bg_anim1.setEndValue(QColor(end_bg1))
+        self.btnOrder._bg_anim1.valueChanged.connect(lambda val: setattr(self.btnOrder, '_anim_col1', val) or update_button_gradient())
+
+        self.btnOrder._bg_anim2 = QVariantAnimation(self.btnOrder)
+        self.btnOrder._bg_anim2.setDuration(200)
+        self.btnOrder._bg_anim2.setStartValue(QColor(start_bg2))
+        self.btnOrder._bg_anim2.setEndValue(QColor(end_bg2))
+        self.btnOrder._bg_anim2.valueChanged.connect(lambda val: setattr(self.btnOrder, '_anim_col2', val) or update_button_gradient())
+
+        self.btnOrder._bg_anim1.start()
+        self.btnOrder._bg_anim2.start()
+
+        # Trigger project sorting update
+        self.sortProjects(getattr(self, '_last_sort_criteria', 'name'))
+
+    def sortProjects(self, criteria):
+        """Sorts the saved projects list based on chosen criteria and direction."""
+        self._last_sort_criteria = criteria
+        all_projects = load_projects_from_json()
+        active_projects = [p for p in all_projects if not getattr(p, 'is_archived', False)]
+
+        if criteria == "name":
+            active_projects.sort(key=lambda p: p.name.lower(), reverse=not self.is_ascending)
+        elif criteria == "deadline":
+            active_projects.sort(key=lambda p: p.deadline if p.deadline and p.deadline != "No Deadline" else "9999-12-31", reverse=not self.is_ascending)
+        elif criteria == "progress":
+            active_projects.sort(key=lambda p: p.progress, reverse=self.is_ascending) # Progress high-to-low by default
+        elif criteria == "status":
+            active_projects.sort(key=lambda p: p.status.value, reverse=not self.is_ascending)
+
+        # TODO: Persistent sorting settings. Choose whether this is enabled within Settings.
+        self.saved_projects = active_projects
+        self.refreshGridWithSortedProjects(active_projects)
+
+    def refreshGridWithSortedProjects(self, sorted_list):
+        """Helper to render the grid using a specific sorted list order."""
+        while self.projectsGrid.count():
+            item = self.projectsGrid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        max_cols = 4
+        for i in range(max_cols):
+            self.projectsGrid.setColumnStretch(i, 1)
+
+        if sorted_list:
+            row, col = 0, 0
+            for project in sorted_list:
+                project.controller_ref = self.controller
+                projectWidget = project.newDisplayWidget(self.scrollContentWidget)
+                projectWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                projectWidget.setMinimumWidth(260)
+                projectWidget.setMaximumWidth(16777215)
+                
+                if hasattr(projectWidget, 'contentWidget'):
+                    projectWidget.contentWidget.installEventFilter(self)
+
+                self.projectsGrid.addWidget(projectWidget, row, col)
+                col += 1
+                if col >= max_cols:
+                    col = 0
+                    row += 1
+
+            if col > 0:
+                for c in range(col, max_cols):
+                    dummy = QWidget()
+                    dummy.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                    dummy.setStyleSheet("background: transparent; border: none;")
+                    self.projectsGrid.addWidget(dummy, row, c)
+        else:
+            self.emptyProjectsList()

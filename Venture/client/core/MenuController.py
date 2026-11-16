@@ -29,6 +29,9 @@ class MainController(QMainWindow):
         QCoreApplication.setOrganizationName("LunarStudios")
         QCoreApplication.setApplicationName("VentureApp")
 
+        app_icon = os.path.join(root_dir, 'assets', 'icons', 'core', 'icon_core_appicon.png')
+        self.setWindowIcon(QIcon(app_icon))
+
         self.is_modal_active = False
         self.settingsFunctions = SettingsHandler.Settings(self)
 
@@ -428,11 +431,9 @@ class MainController(QMainWindow):
         self.setPalette(palette)
         self.setAutoFillBackground(True)
 
-def main():
+if __name__ == "__main__":
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LunarStudios.VentureApp")
     app = QApplication(sys.argv)
     window = MainController()
     window.showMaximized()
     sys.exit(app.exec())
-
-if __name__ == "__main__":
-    main()

@@ -4,6 +4,7 @@ from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap, QFont, QIcon, QLinearGr
 import Themes
 import os, time, datetime, re
 
+# Helper Funcs
 def get_resolved_icon_path(icon_str: str) -> str:
     """Resolves an icon path dynamically, supporting built-in assets in icons/core and custom user files"""
     if not icon_str:
@@ -97,6 +98,7 @@ def parse_deadline_to_readable(deadline_str):
         pass
     return deadline_str
 
+# Data Cards
 class ProjectCardWidget(QWidget):
     """Custom widget for Project Cards"""
     def __init__(self, project_instance, parent=None):
@@ -271,7 +273,6 @@ class ProjectCardWidget(QWidget):
             if self.descLabel:
                 self.descLabel.setText(new_displaydesc)
 
-
 class TaskCardWidget(QFrame):
     """Custom widget for Task Cards"""
     def __init__(self, task_instance, parent=None, on_update_callback=None):
@@ -338,7 +339,7 @@ class TaskCardWidget(QFrame):
         taskDetails = QVBoxLayout()
         taskDetails.setSpacing(6)
 
-        self.nameLabel = QLabel(f"{self.task_instance.name}")
+        self.nameLabel = QLabel(f"{self.task_instance.name}", self.taskContentWidget)
         self.nameLabel.setFont(QFont(activeFont, 16, QFont.Weight.Bold))
         self.nameLabel.setWordWrap(True)
         self.nameLabel.setStyleSheet(f"color: {theme.sidebar_activebtn if not completed else theme.core_widgets_gentext}; border: none; background: transparent;")
@@ -607,7 +608,14 @@ class SubtaskCardWidget(QFrame):
         self.subtask = subtask
         self.on_update_callback = on_update_callback
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setup_ui()
+
+    def mousePressEvent(self, event):
+        """Toggles the checkbox when clicking anywhere on the subtask card widget."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.checkbox.setChecked(not self.checkbox.isChecked())
+        super().mousePressEvent(event)
 
     def setup_ui(self):
         controller = getattr(self.subtask, 'controller_ref', None)
@@ -781,8 +789,6 @@ class SubtaskCardWidget(QFrame):
         self.subtask.name = new_name
         if new_weight is not None:
             self.subtask.weight = new_weight
-        if new_weight is not None:
-            self.subtask.weight = new_weight
         if self.on_update_callback:
             self.on_update_callback(refresh_list=True)
 
@@ -809,7 +815,7 @@ class SubtaskCardWidget(QFrame):
         if self.on_update_callback:
             self.on_update_callback(refresh_list=True)
 
-
+# Reusable Buttons
 class HoverButton(QPushButton):
     """Custom Button that supports AnimationHandler's functionalities"""
     def __init__(self, text, parent=None, animator=None):
@@ -867,7 +873,6 @@ class EditIconButton(HoverButton):
             f"outline: none;"
         )
         self.setHoverData(["border"], [theme.core_widgets_border], [theme.core_pos_border_hover])
-
 
 class DeleteIconButton(HoverButton):
     """Reusable Delete button with preset styling and icon resolution"""
@@ -943,6 +948,7 @@ class CustomCheckBox(QCheckBox):
                 painter.drawPath(path)
             painter.end()
 
+# Misc
 class SmoothGradientWidget(QWidget):
     """Custom widget rendering smooth diagonal gradients to eliminate colour banding"""
     def __init__(self, hex1, hex2, border_colour="black", border_width=4, parent=None):
@@ -972,7 +978,6 @@ class SmoothGradientWidget(QWidget):
             painter.setPen(QPen(self.border_colour, self.border_width))
             right_x = self.width() - (self.border_width // 2)
             painter.drawLine(right_x, 0, right_x, self.height())
-
 
 class RoundedScrollBar(QScrollBar):
     """Custom painted scrollbar because QSS is annoying"""
@@ -1043,7 +1048,6 @@ class RoundedScrollBar(QScrollBar):
             else:
                 h_rect = handle_rect.adjusted(2, 2, -2, -2)
                 painter.drawRoundedRect(h_rect, 5, 5)
-
 
 class CustomStackedWidget(QStackedWidget):
     """Customized QStackedWidget to support card-deck animations"""

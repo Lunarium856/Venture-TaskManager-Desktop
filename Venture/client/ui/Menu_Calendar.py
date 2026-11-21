@@ -17,9 +17,12 @@ class DayCellWidget(QWidget):
         self.controller = controller
         self.theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
         self.activeFont = controller.activeJetFamFont if controller and hasattr(controller, 'activeJetFamFont') else "Arial"
-        
+
+        self.setObjectName("DayCellWidget")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setup_ui()
+        self.installEventFilter(self)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -56,15 +59,37 @@ class DayCellWidget(QWidget):
 
         # Cell styling
         bg_opacity = "0.35" if is_today else ("0.15" if self.is_current_month else "0.05")
-        border_color = self.theme.core_pos_border if is_today else self.theme.core_widgets_border
-        
+        self.resting_border = self.theme.core_pos_bg.hex2 if is_today else self.theme.sidebar_neutralbtn_border
+        self.hover_border = self.theme.core_pos_border_hover
+
         self.setStyleSheet(
-            "QWidget {"
+            "QWidget#DayCellWidget {"
             f"    background-color: rgba(30, 30, 30, {bg_opacity});"
-            f"    border: 2px solid {border_color};"
+            f"    border: 2px solid {self.resting_border};"
             f"    border-radius: 10px;"
             "}"
         )
+
+    def eventFilter(self, obj, event):
+        if obj is self and self.controller and getattr(self.controller, "animator", None):
+            animator = self.controller.animator
+            if event.type() == QEvent.Type.Enter:
+                animator.animateOnHover(
+                    self,
+                    ["border"],
+                    [self.resting_border],
+                    [self.hover_border],
+                    duration=160,
+                )
+            elif event.type() == QEvent.Type.Leave:
+                animator.animateOnHover(
+                    self,
+                    ["border"],
+                    [self.hover_border],
+                    [self.resting_border],
+                    duration=160,
+                )
+        return super().eventFilter(obj, event)
 
 
 class CalendarPage(QWidget):
@@ -159,10 +184,10 @@ class CalendarPage(QWidget):
         self.btnToday.setFixedHeight(40); self.btnToday.setFixedWidth(140)
         self.btnToday.setStyleSheet(
             f"color: {self.theme.core_widgets_btntext};"
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_neutral_bg.hex1}, stop:1 {self.theme.core_neutral_bg.hex2});"
-            f"border: 2px solid {self.theme.core_neutral_border}; border-radius: 12px;"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_pos_bg.hex1}, stop:1 {self.theme.core_pos_bg.hex2});"
+            f"border: 2px solid {self.theme.core_pos_border}; border-radius: 12px;"
         )
-        self.btnToday.setHoverData(["border"], [self.theme.core_neutral_border], [self.theme.core_neutral_border_hover])
+        self.btnToday.setHoverData(["border"], [self.theme.core_pos_border], [self.theme.core_pos_border_hover])
         self.btnToday.clicked.connect(self.goToToday)
 
         bottomBar.addWidget(self.btnToday)

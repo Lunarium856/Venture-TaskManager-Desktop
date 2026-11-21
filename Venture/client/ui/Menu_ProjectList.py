@@ -365,6 +365,9 @@ class CreateProjectOverlay(QWidget):
         self.yearDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
         self.updateDaysInMonth()
 
+        defaultDeadline = (datetime.date.today() + datetime.timedelta(days=3)).isoformat()
+        self.set_initial_date(defaultDeadline)
+
         # Description Field
         descLayout = QHBoxLayout()
         descLabel = QLabel("DESCRIPTION")
@@ -763,6 +766,9 @@ class CreateTaskOverlay(QWidget):
             self.monthDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
             self.yearDropdown.currentIndexChanged.connect(self.updateDaysInMonth)
             self.updateDaysInMonth()
+
+            defaultDeadline = (datetime.date.today() + datetime.timedelta(days=3)).isoformat()
+            self.set_initial_date(defaultDeadline)
 
         # Priority Field
         weightLayout = QHBoxLayout()
@@ -1816,6 +1822,14 @@ class ProjectListPage(QWidget):
     def showSortMenu(self):
         """Displays a popup menu with sorting criteria options."""
         menu = QMenu(self)
+        menu.setFont(QFont(self.activeJetFamFont, 8))
+        menu.setWindowFlags(
+            menu.windowFlags()
+            | Qt.WindowType.Popup
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.NoDropShadowWindowHint
+        )
+        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         menu.setStyleSheet(
             f"QMenu {{"
             f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
@@ -1829,7 +1843,7 @@ class ProjectListPage(QWidget):
             f"    border-radius: 6px;"
             f"}}"
             f"QMenu::item:selected {{"
-            f"    background-color: {self.theme.core_pos_bg.hex1};"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_pos_bg.hex1}, stop:0.8 {self.theme.core_pos_bg.hex2});"
             f"    color: {self.theme.core_widgets_btntext};"
             f"}}"
         )
@@ -1838,10 +1852,23 @@ class ProjectListPage(QWidget):
         action_deadline = menu.addAction("Deadline")
         action_progress = menu.addAction("Progress")
         action_status = menu.addAction("Status")
+        action_total_tasks = menu.addAction("Total Tasks")
 
-        # Position menu right above/below the sort button
         btn_pos = self.btnSort.mapToGlobal(QPoint(0, -135))
         selected_action = menu.exec(btn_pos)
+
+        sort_map = {
+            action_name: ("name", "A-Z ▾"),
+            action_deadline: ("deadline", "DEADLINE ▾"),
+            action_progress: ("progress", "PROGRESS ▾"),
+            action_status: ("status", "STATUS ▾"),
+            action_total_tasks: ("total_tasks", "TASKS ▾"),
+        }
+
+        if selected_action in sort_map:
+            criteria, label = sort_map[selected_action]
+            self.btnSort.setText(label)
+            self.sortProjects(criteria)
 
         if selected_action == action_name:
             self.sortProjects("name")
@@ -1920,9 +1947,11 @@ class ProjectListPage(QWidget):
         elif criteria == "deadline":
             active_projects.sort(key=lambda p: p.deadline if p.deadline and p.deadline != "No Deadline" else "9999-12-31", reverse=not self.is_ascending)
         elif criteria == "progress":
-            active_projects.sort(key=lambda p: p.progress, reverse=self.is_ascending) # Progress high-to-low by default
+            active_projects.sort(key=lambda p: p.progress, reverse=not self.is_ascending)
         elif criteria == "status":
             active_projects.sort(key=lambda p: p.status.value, reverse=not self.is_ascending)
+        elif criteria == "total_tasks":
+            active_projects.sort(key=lambda p: sum(1 + len(getattr(t, "subtasks", []) or []) for t in (getattr(p, "tasks", []) or [])), reverse=not self.is_ascending)
 
         # TODO: Persistent sorting settings. Choose whether this is enabled within Settings.
         self.saved_projects = active_projects

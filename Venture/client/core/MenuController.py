@@ -12,7 +12,7 @@ sys.path.append(os.path.join(client_dir, 'data'))
 
 import AnimationHandler, SettingsHandler, Menu_ProjectList, Menu_About, Menu_Archive, Menu_Calendar, Menu_Tags, Menu_Settings, Themes, DummyList
 from ProjectClasses import Project, Task, Subtask, Tag
-from CustomWidgets import CustomStackedWidget
+from CustomWidgets import CustomStackedWidget, ToastNotification
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
@@ -22,6 +22,7 @@ class MainController(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # Window Info & Handler Setups
         self.setWindowTitle("Venture")
         self.resize(1200, 800)
         self.screen = QApplication.primaryScreen()
@@ -34,15 +35,15 @@ class MainController(QMainWindow):
 
         self.is_modal_active = False
         self.settingsFunctions = SettingsHandler.Settings(self)
+        self.animator = AnimationHandler.Animator()
 
-        # Load & Retrieve Theme
+        # Theme Loading
         if not self.settingsFunctions.value("theme"):
             self.settingsFunctions.setValue("theme", "Venture")
         theme_name = self.settingsFunctions.value("theme", "Venture")
         self.current_theme = Themes.get_theme(theme_name)
 
-        self.animator = AnimationHandler.Animator()
-
+        # Asset Loading
         self.font_Mag = None
         self.font_JetFam = None
         self.font_FAILSAFE = "Arial"
@@ -84,6 +85,7 @@ class MainController(QMainWindow):
         self.activeMagFont = self.font_Mag if self.font_Mag else self.font_FAILSAFE
         self.activeJetFamFont = self.font_JetFam if self.font_JetFam else self.font_FAILSAFE
 
+        # View Handler Construction
         self.masterWidget = QWidget(self)
         self.setCentralWidget(self.masterWidget)
         self.mainMenuLayout = QHBoxLayout(self.masterWidget)
@@ -92,7 +94,8 @@ class MainController(QMainWindow):
 
         self.stackedWidget = CustomStackedWidget()
         self.stackedWidget.setObjectName("mainContentStack")
-        
+
+        # Sidebar Construction
         self.sidebarWidget = QWidget()
         self.sidebarLayout = QVBoxLayout(self.sidebarWidget)
         self.sidebarLayout.setContentsMargins(0, 30, 0, 50)
@@ -284,8 +287,22 @@ class MainController(QMainWindow):
     def returnToProjects(self):
         self.navigateTo(self.page_project_list)
 
-    def deleteProject(self):
-        pass
+    def showToast(self, message: str, toast_type: str = "info", duration: int = 2500):
+        """Displays a floating toast notification over the main content stack."""
+        container = self.stackedWidget if hasattr(self, "stackedWidget") and self.stackedWidget else self.masterWidget
+        if hasattr(self, "_active_toast") and self._active_toast is not None:
+            try:
+                self._active_toast.close()
+            except RuntimeError:
+                pass
+        self._active_toast = ToastNotification(
+            message=message,
+            toast_type=toast_type,
+            duration=duration,
+            parent=container,
+            controller=self,
+        )
+        self._active_toast.showToast()
 
     def updateSidebar(self, new_active_btn):
         if not new_active_btn or self.activeButton == new_active_btn:

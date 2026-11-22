@@ -555,6 +555,8 @@ class CreateProjectOverlay(QWidget):
         if name and self.on_create_callback:
             self.is_submitting = True
             self.on_create_callback(name, deadline, desc)
+            if self.controller and hasattr(self.controller, "showToast"):
+                self.controller.showToast(f"Created project '{name}'", toast_type="success")
             QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
         self.closeOverlay()
 
@@ -602,6 +604,8 @@ class EditProjectOverlay(CreateProjectOverlay):
         if name and self.on_save_callback:
             self.is_submitting = True
             self.on_save_callback(name, deadline, desc)
+            if self.controller and hasattr(self.controller, "showToast"):
+                self.controller.showToast(f"Saved changes to '{name}'", toast_type="success")
             QTimer.singleShot(250, lambda: setattr(self, 'is_submitting', False))
         self.closeOverlay()
 
@@ -1391,6 +1395,9 @@ class ProjectDetailPage(QWidget):
                 task_widget = t_obj.newDisplayWidget(self.contentWidget, on_update_callback=self.saveAndRefreshTasks)
                 self.contentLayout.addWidget(task_widget)
 
+        if len(tasks_list) < 6:
+            self.contentLayout.addStretch()
+
     def createNewTask(self):
         self.controller.is_modal_active = True
         CreateTaskOverlay(
@@ -1423,6 +1430,8 @@ class ProjectDetailPage(QWidget):
         self.project.tasks.append(new_task)
 
         self.saveAndRefreshTasks(refresh_list=True)
+        if self.controller and hasattr(self.controller, "showToast"):
+            self.controller.showToast(f"Added task '{task_name}'", toast_type="success")
 
     def saveAndRefreshTasks(self, refresh_list=False):
         """Saves Tasks data to projects.json & refreshes UI to reflect changes"""
@@ -1519,12 +1528,15 @@ class ProjectDetailPage(QWidget):
 
     def performArchive(self):
         proj_id = self.project.projectID
+        proj_name = self.project.name
         all_projects = load_projects_from_json()
         for p in all_projects:
             if p.projectID == proj_id:
                 p.is_archived = True
                 break
         save_projects_to_json(all_projects)
+        if self.controller and hasattr(self.controller, "showToast"):
+            self.controller.showToast(f"Archived '{proj_name}'", toast_type="info")
         self.controller.returnToProjects()
 
     def deleteProjectPrompt(self):
@@ -1541,9 +1553,12 @@ class ProjectDetailPage(QWidget):
 
     def performDelete(self):
         proj_id = self.project.projectID
+        proj_name = self.project.name
         all_projects = load_projects_from_json()
         all_projects = [p for p in all_projects if p.projectID != proj_id]
         save_projects_to_json(all_projects)
+        if self.controller and hasattr(self.controller, "showToast"):
+            self.controller.showToast(f"Deleted '{proj_name}'", toast_type="error")
         self.controller.returnToProjects()
 
 class ProjectListPage(QWidget):

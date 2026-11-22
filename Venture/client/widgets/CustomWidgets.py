@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QFrame, QWidget, QPushButton, QStyleOptionButton, QScrollBar, QStyleOptionSlider, QStyle, QStackedWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QCheckBox
+from PyQt6.QtWidgets import QFrame, QWidget, QPushButton, QStyleOptionButton, QScrollBar, QStyleOptionSlider, QStyle, QStackedWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QCheckBox, QGraphicsOpacityEffect
 from PyQt6.QtCore import QEvent, Qt, QVariantAnimation, QParallelAnimationGroup, QPropertyAnimation, QRect, QEasingCurve, QSize, QObject, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap, QFont, QIcon, QLinearGradient, QPainterPath
 import Themes
@@ -1114,3 +1114,101 @@ class CustomStackedWidget(QStackedWidget):
         anim_group.finished.connect(on_finished)
         self.move_anim = anim_group
         anim_group.start()
+
+class ToastNotification(QWidget):
+    """Non-blocking floating toast notification anchored at the bottom-center of a parent container."""
+    def __init__(self, message: str, toast_type: str = "info", duration: int = 2500, parent=None, controller=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.theme = controller.current_theme if (controller and hasattr(controller, "current_theme")) else Themes.THEME_DEFAULT
+        self.activeFont = controller.activeJetFamFont if (controller and hasattr(controller, "activeJetFamFont")) else "Arial"
+        self.toast_type = toast_type.lower() if toast_type else "info"
+        self.duration = duration
+
+        self.setObjectName("ToastNotification")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+
+        if self.toast_type == "error":
+            bg1, bg2, border_col = self.theme.core_neg_bg.hex1, self.theme.core_neg_bg.hex2, self.theme.core_neg_border
+        elif self.toast_type == "success":
+            bg1, bg2, border_col = self.theme.core_pos_bg.hex1, self.theme.core_pos_bg.hex2, self.theme.core_pos_border
+        else:
+            bg1, bg2, border_col = self.theme.core_bg_widgets.hex1, self.theme.core_bg_widgets.hex2, self.theme.core_widgets_border
+
+        self.setStyleSheet(
+            "QWidget#ToastNotification {"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {bg1}, stop:0.8 {bg2});"
+            f"    border: 2px solid {border_col};"
+            f"    border-radius: 12px;"
+            "}"
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(8)
+
+        self.label = QLabel(message, self)
+        self.label.setFont(QFont(self.activeFont, 10, QFont.Weight.Bold))
+        self.label.setStyleSheet(
+            f"color: {self.theme.core_widgets_btntext if self.toast_type in ('error', 'success') else self.theme.core_widgets_gentext};"
+            "background: transparent; border: none;"
+        )
+        layout.addWidget(self.label)
+
+        self.effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.effect)
+        self.effect.setOpacity(0.0)
+
+        self.adjustSize()
+        self.reposition()
+
+        if self.parent():
+            self.parent().installEventFilter(self)
+
+        self._fade_in = QPropertyAnimation(self.effect, b"opacity", self)
+        self._fade_in.setDuration(180)
+        self._fade_in.setStartValue(0.0)
+        self._fade_in.setEndValue(1.0)
+        self._fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        self._dismiss_timer = QTimer(self)
+        self._dismiss_timer.setSingleShot(True)
+        self._dismiss_timer.timeout.connect(self.fadeOut)
+
+        self._fade_out = None
+
+    def reposition(self):
+        if not self.parent():
+            return
+        parent_rect = self.parent().rect()
+        margin_x = 24
+        margin_y = 24
+        x = max(margin_x, (parent_rect.width() - self.width()) // 2)
+        y = max(margin_y, parent_rect.height() - self.height() - margin_y)
+        self.move(x, y)
+        self.raise_()
+
+    def eventFilter(self, obj, event):
+        if obj is self.parent() and event.type() == QEvent.Type.Resize:
+            self.reposition()
+        return super().eventFilter(obj, event)
+
+    def showToast(self):
+        self.adjustSize()
+        self.reposition()
+        self.show()
+        self._fade_in.start()
+        self._dismiss_timer.start(self.duration)
+
+    def fadeOut(self):
+        if self._fade_out is not None:
+            return
+        self._fade_out = QPropertyAnimation(self.effect, b"opacity", self)
+        self._fade_out.setDuration(220)
+        self._fade_out.setStartValue(self.effect.opacity())
+        self._fade_out.setEndValue(0.0)
+        self._fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
+        self._fade_out.finished.connect(self.close)
+        self._fade_out.start()

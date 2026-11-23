@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QFrame, QWidget, QPushButton, QStyleOptionButton, QScrollBar, QStyleOptionSlider, QStyle, QStackedWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QProgressBar, QCheckBox, QGraphicsOpacityEffect
-from PyQt6.QtCore import QEvent, Qt, QVariantAnimation, QParallelAnimationGroup, QPropertyAnimation, QRect, QEasingCurve, QSize, QObject, QTimer
+from PyQt6.QtCore import Qt, QEvent, QPoint, QVariantAnimation, QParallelAnimationGroup, QPropertyAnimation, QRect, QEasingCurve, QSize, QObject, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap, QFont, QIcon, QLinearGradient, QPainterPath
 import Themes
 import os, time, datetime, re
@@ -282,6 +282,8 @@ class TaskCardWidget(QFrame):
         self.task_instance._last_animated_status = bool(self.task_instance.status)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setup_ui()
+        if not bool(self.task_instance.subtasks):
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def update_status_visuals(self, new_status):
         """Triggers the background and text transition animation for task checkboxes."""
@@ -383,10 +385,10 @@ class TaskCardWidget(QFrame):
                 f"    border: 2px solid {chk_border}; border-radius: 12px;"
                 f"    outline: none;"
                 f"}}"
-                f"QCheckBox::indicator:hover {{"
-                f"    border: 2px solid {chk_border_hover};"
-                f"    outline: none;"
-                f"}}"
+                # f"QCheckBox::indicator:hover {{"
+                # f"    border: 2px solid {chk_border_hover};"
+                # f"    outline: none;"
+                # f"}}"
                 f"QCheckBox::indicator:checked {{"
                 f"    background: {theme.core_pos_border};"
                 f"    border: 2px solid {theme.core_pos_border};"
@@ -460,7 +462,39 @@ class TaskCardWidget(QFrame):
                 sub.controller_ref = controller
                 subtaskCard = SubtaskCardWidget(sub, self, on_update_callback=self.on_update_callback)
                 contentContainer.addWidget(subtaskCard)
-    
+
+    def eventFilter(self, obj, event):
+        if obj is self and not bool(self.task_instance.subtasks):
+            controller = getattr(self.task_instance, "controller_ref", None)
+            theme = (
+                controller.current_theme
+                if controller and hasattr(controller, "current_theme")
+                else Themes.THEME_DEFAULT
+            )
+            completed = bool(self.task_instance.status)
+            b_col = theme.core_pos_border if completed else theme.core_neutral_border
+            hl_col = theme.core_pos_border_hover
+
+            if event.type() == QEvent.Type.Enter:
+                if self.animator:
+                    self.animator.animateOnHover(obj, ["border"], [b_col], [hl_col])
+                return True
+            elif event.type() == QEvent.Type.Leave:
+                if self.animator:
+                    self.animator.animateOnHover(obj, ["border"], [hl_col], [b_col])
+                return True
+        return super().eventFilter(obj, event)
+
+    def mousePressEvent(self, event):
+        """Toggles the checkbox when clicking a task card that has no subtasks."""
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and not bool(self.task_instance.subtasks)
+            and hasattr(self, "checkbox")
+            and not self.checkbox.underMouse()
+        ):
+            self.checkbox.setChecked(not self.checkbox.isChecked())
+        super().mousePressEvent(event)
 
     def onCheckboxChanged(self, state):
         new_status = (state == Qt.CheckState.Checked.value or state == 2)
@@ -534,7 +568,7 @@ class TaskCardWidget(QFrame):
             on_create_callback=self.onSubtaskCreated,
             controller=controller
         )
-
+    
     def onSubtaskCreated(self, sub_name, sub_weight=None):
         from ProjectClasses import Subtask, Weight
         new_sub = Subtask(
@@ -611,12 +645,6 @@ class SubtaskCardWidget(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setup_ui()
 
-    def mousePressEvent(self, event):
-        """Toggles the checkbox when clicking anywhere on the subtask card widget."""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.checkbox.setChecked(not self.checkbox.isChecked())
-        super().mousePressEvent(event)
-
     def setup_ui(self):
         controller = getattr(self.subtask, 'controller_ref', None)
         activeFont = controller.activeJetFamFont if controller and hasattr(controller, 'activeJetFamFont') else "Arial"
@@ -661,10 +689,10 @@ class SubtaskCardWidget(QFrame):
             f"    border: 2px solid {chk_border}; border-radius: 4px;"
             f"    outline: none;"
             f"}}"
-            f"QCheckBox::indicator:hover {{"
-            f"    border: 2px solid {chk_border_hover};"
-            f"    outline: none;"
-            f"}}"
+            # f"QCheckBox::indicator:hover {{"
+            # f"    border: 2px solid {chk_border_hover};"
+            # f"    outline: none;"
+            # f"}}"
             f"QCheckBox::indicator:checked {{"
             f"    background: {theme.core_pos_border};"
             f"    border: 2px solid {theme.core_pos_border};"
@@ -719,6 +747,12 @@ class SubtaskCardWidget(QFrame):
                     self.animator.animateOnHover(obj, ["border"], [hl_col], [b_col])
                 return True
         return super().eventFilter(obj, event)
+
+    def mousePressEvent(self, event):
+        """Toggles the checkbox when clicking anywhere on the subtask card widget."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.checkbox.setChecked(not self.checkbox.isChecked())
+        super().mousePressEvent(event)
 
     def onCheckboxChanged(self, state):
         new_status = (state == Qt.CheckState.Checked.value or state == 2)
@@ -1116,10 +1150,11 @@ class CustomStackedWidget(QStackedWidget):
         anim_group.start()
 
 class ToastNotification(QWidget):
-    """Non-blocking floating toast notification anchored at the bottom-center of a parent container."""
-    def __init__(self, message: str, toast_type: str = "info", duration: int = 2500, parent=None, controller=None):
+    """Quick notification that shows to confirm notable actions."""
+    def __init__(self, message: str, toast_type: str = "info", duration: int = 2500, parent=None, controller=None, anchor_to_main: bool = False):
         super().__init__(parent)
         self.controller = controller
+        self.anchor_to_main = anchor_to_main
         self.theme = controller.current_theme if (controller and hasattr(controller, "current_theme")) else Themes.THEME_DEFAULT
         self.activeFont = controller.activeJetFamFont if (controller and hasattr(controller, "activeJetFamFont")) else "Arial"
         self.toast_type = toast_type.lower() if toast_type else "info"
@@ -1183,9 +1218,25 @@ class ToastNotification(QWidget):
         if not self.parent():
             return
         parent_rect = self.parent().rect()
+        sidebar_w = 0
+        if self.controller and hasattr(self.controller, "sidebarWidget") and self.controller.sidebarWidget:
+            if self.controller.sidebarWidget.isVisible():
+                sidebar_w = self.controller.sidebarWidget.width()
+
+        main_area_width = max(0, parent_rect.width() - sidebar_w)
         margin_x = 24
-        margin_y = 24
-        x = max(margin_x, (parent_rect.width() - self.width()) // 2)
+
+        if self.anchor_to_main:
+            margin_y = 14
+        else:
+            current_page = (
+                self.controller.stackedWidget.currentWidget()
+                if (self.controller and hasattr(self.controller, "stackedWidget") and self.controller.stackedWidget)
+                else None
+            )
+            margin_y = 95 if (current_page and current_page.__class__.__name__ == "ProjectDetailPage") else 14
+
+        x = max(margin_x, (main_area_width - self.width()) // 2)
         y = max(margin_y, parent_rect.height() - self.height() - margin_y)
         self.move(x, y)
         self.raise_()
@@ -1212,3 +1263,79 @@ class ToastNotification(QWidget):
         self._fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
         self._fade_out.finished.connect(self.close)
         self._fade_out.start()
+
+class DueTasksPopup(QWidget):
+    """Floating hover card listing tasks and projects due on a hovered calendar date."""
+    def __init__(self,date_label: str, task_names: list[str] = None, project_names: list[str] = None, parent=None, controller=None):
+        super().__init__(parent)
+        task_names = list(task_names or [])
+        project_names = list(project_names or [])
+
+        self.theme = controller.current_theme if (controller and hasattr(controller, "current_theme")) else Themes.THEME_DEFAULT
+        active_font = controller.activeJetFamFont if (controller and hasattr(controller, "activeJetFamFont")) else "Arial"
+
+        self.setObjectName("DueTasksPopup")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+
+        self.setStyleSheet(
+            "QWidget#DueTasksPopup {"
+            f"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0.2 {self.theme.core_bg_widgets.hex1}, stop:0.8 {self.theme.core_bg_widgets.hex2});"
+            f"    border: 2px solid {self.theme.core_widgets_border};"
+            f"    border-radius: 12px;"
+            "}"
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(4)
+
+        header = QLabel(f"DUE {date_label.upper()}", self)
+        header.setFont(QFont(active_font, 9, QFont.Weight.Bold))
+        header.setStyleSheet(f"color: {self.theme.sidebar_activebtn}; background: transparent; border: none;")
+        layout.addWidget(header)
+
+        if task_names:
+            tasks_hdr = QLabel("TASKS", self)
+            tasks_hdr.setFont(QFont(active_font, 8, QFont.Weight.Bold))
+            tasks_hdr.setStyleSheet(f"color: {self.theme.core_pos_bg.hex2}; background: transparent; border: none; margin-top: 2px;")
+            layout.addWidget(tasks_hdr)
+
+            for name in task_names:
+                item_lbl = QLabel(f"• {name}", self)
+                item_lbl.setFont(QFont(active_font, 10, QFont.Weight.Bold))
+                item_lbl.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
+                layout.addWidget(item_lbl)
+
+        if project_names:
+            projs_hdr = QLabel("PROJECTS", self)
+            projs_hdr.setFont(QFont(active_font, 8, QFont.Weight.Bold))
+            projs_hdr.setStyleSheet(f"color: {self.theme.project_progress.hex2}; background: transparent; border: none; margin-top: 2px;")
+            layout.addWidget(projs_hdr)
+
+            for name in project_names:
+                item_lbl = QLabel(f"• {name}", self)
+                item_lbl.setFont(QFont(active_font, 10, QFont.Weight.Bold))
+                item_lbl.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
+                layout.addWidget(item_lbl)
+
+        self.effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.effect)
+        self.effect.setOpacity(0.0)
+
+        self._fade_in = QPropertyAnimation(self.effect, b"opacity", self)
+        self._fade_in.setDuration(140)
+        self._fade_in.setStartValue(0.0)
+        self._fade_in.setEndValue(1.0)
+        self._fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def popupAt(self, target_pos: QPoint, bounds_rect: QRect):
+        self.adjustSize()
+        margin = 10
+        x = max(bounds_rect.left() + margin, min(target_pos.x(), bounds_rect.right() - self.width() - margin))
+        y = max(bounds_rect.top() + margin, min(target_pos.y(), bounds_rect.bottom() - self.height() - margin))
+        self.move(x, y)
+        self.raise_()
+        self.show()
+        self._fade_in.start()

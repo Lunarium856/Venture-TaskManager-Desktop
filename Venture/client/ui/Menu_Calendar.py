@@ -1,6 +1,6 @@
 import SettingsHandler, Themes, AnimationHandler, DummyList
 from ProjectClasses import Project, Task, Subtask, Tag, Status
-from CustomWidgets import HoverButton, RoundedScrollBar, SmoothGradientWidget, get_resolved_icon_path, tint_pixmap
+from CustomWidgets import HoverButton, RoundedScrollBar, SmoothGradientWidget, DueTasksPopup, get_resolved_icon_path, tint_pixmap
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
@@ -9,11 +9,15 @@ from Menu_ProjectList import load_projects_from_json
 
 class DayCellWidget(QWidget):
     """Custom widget representing an individual day cell in the calendar grid"""
-    def __init__(self, date: datetime.date, is_current_month: bool, events: list, parent=None, controller=None):
+    def __init__(
+        self, date: datetime.date, is_current_month: bool, events: list = None, task_events: list = None, project_events: list = None, parent=None, calendar_page=None, controller=None):
         super().__init__(parent)
         self.date = date
         self.is_current_month = is_current_month
-        self.events = events
+        self.task_events = list(task_events) if task_events is not None else list(events or [])
+        self.project_events = list(project_events) if project_events is not None else []
+        self.events = self.task_events + self.project_events
+        self.calendar_page = calendar_page
         self.controller = controller
         self.theme = controller.current_theme if controller and hasattr(controller, 'current_theme') else Themes.THEME_DEFAULT
         self.activeFont = controller.activeJetFamFont if controller and hasattr(controller, 'activeJetFamFont') else "Arial"
@@ -44,16 +48,32 @@ class DayCellWidget(QWidget):
         layout.addWidget(dayNumLbl)
 
         # Event / Deadline badges
-        if self.events:
-            eventCount = len(self.events)
-            badgeLbl = QLabel(f"{eventCount} task{'s' if eventCount > 1 else ''}", self)
-            badgeLbl.setFont(QFont(self.activeFont, 9, QFont.Weight.Bold))
-            badgeLbl.setStyleSheet(
-                f"color: {self.theme.core_widgets_btntext};"
-                f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0.2 {self.theme.core_pos_bg.hex1}, stop:0.9 {self.theme.core_pos_bg.hex2});"
-                f"border-radius: 6px; padding: 2px 4px;"
+        badge_style_base = (
+            f"color: {self.theme.core_widgets_btntext};"
+            f"border-radius: 6px; padding: 2px 6px;"
+        )
+
+        # Due Tasks badge
+        task_count = len(self.task_events)
+        if task_count > 0:
+            taskBadgeLbl = QLabel(f"{task_count} task{'s' if task_count != 1 else ''}", self)
+            taskBadgeLbl.setFont(QFont(self.activeFont, 9, QFont.Weight.Bold))
+            taskBadgeLbl.setStyleSheet(
+                badge_style_base
+                + f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0.2 {self.theme.core_pos_bg.hex1}, stop:0.9 {self.theme.core_pos_bg.hex2});"
             )
-            layout.addWidget(badgeLbl)
+            layout.addWidget(taskBadgeLbl)
+
+        # Due Projects badge
+        proj_count = len(self.project_events)
+        if proj_count > 0:
+            projBadgeLbl = QLabel(f"{proj_count} project{'s' if proj_count != 1 else ''}", self)
+            projBadgeLbl.setFont(QFont(self.activeFont, 9, QFont.Weight.Bold))
+            projBadgeLbl.setStyleSheet(
+                badge_style_base
+                + f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0.2 {self.theme.project_progress.hex1}, stop:0.9 {self.theme.project_progress.hex2});"
+            )
+            layout.addWidget(projBadgeLbl)
 
         layout.addStretch()
 
@@ -70,25 +90,57 @@ class DayCellWidget(QWidget):
             "}"
         )
 
+    def _openDueTasksPopup(self):
+        if not (self.task_events or self.project_events) or not self.calendar_page:
+            return
+
+        self.calendar_page.hideDueTasksPopup()
+        popup_parent = (
+            self.controller.stackedWidget
+            if (self.controller and getattr(self.controller, "stackedWidget", None))
+            else self.calendar_page.viewContainer
+        )
+        popup = DueTasksPopup(
+            date_label=self.date.strftime("%b %d, %Y"),
+            task_names=self.task_events,
+            project_names=self.project_events,
+            parent=popup_parent,
+            controller=self.controller,
+        )
+        self.calendar_page._active_popup = popup
+
+        top_left_in_parent = self.mapTo(popup_parent, QPoint(0, 0))
+        bounds = popup_parent.rect()
+        popup.adjustSize()
+        candidate_y = top_left_in_parent.y() - popup.height() - 6
+        if candidate_y < bounds.top() + 10:
+            candidate_y = top_left_in_parent.y() + self.height() + 6
+        popup.popupAt(QPoint(top_left_in_parent.x(), candidate_y), bounds)
+
     def eventFilter(self, obj, event):
-        if obj is self and self.controller and getattr(self.controller, "animator", None):
-            animator = self.controller.animator
+        if obj is self:
             if event.type() == QEvent.Type.Enter:
-                animator.animateOnHover(
-                    self,
-                    ["border"],
-                    [self.resting_border],
-                    [self.hover_border],
-                    duration=160,
-                )
+                if self.controller and getattr(self.controller, "animator", None):
+                    self.controller.animator.animateOnHover(
+                        self,
+                        ["border"],
+                        [self.resting_border],
+                        [self.hover_border],
+                        duration=160,
+                    )
+                if self.task_events or self.project_events:
+                    self._openDueTasksPopup()
             elif event.type() == QEvent.Type.Leave:
-                animator.animateOnHover(
-                    self,
-                    ["border"],
-                    [self.hover_border],
-                    [self.resting_border],
-                    duration=160,
-                )
+                if self.controller and getattr(self.controller, "animator", None):
+                    self.controller.animator.animateOnHover(
+                        self,
+                        ["border"],
+                        [self.hover_border],
+                        [self.resting_border],
+                        duration=160,
+                    )
+                if self.calendar_page:
+                    self.calendar_page.hideDueTasksPopup()
         return super().eventFilter(obj, event)
 
 
@@ -196,9 +248,23 @@ class CalendarPage(QWidget):
 
         self.populateCalendar()
 
+    def hideDueTasksPopup(self):
+        popup = getattr(self, "_active_popup", None)
+        self._active_popup = None
+        if popup is not None:
+            try:
+                popup.close()
+                popup.deleteLater()
+            except RuntimeError:
+                pass
+
     def showEvent(self, event):
         super().showEvent(event)
         self.populateCalendar()
+
+    def hideEvent(self, event):
+        self.hideDueTasksPopup()
+        super().hideEvent(event)
 
     def prevMonth(self):
         first_day = datetime.date(self.current_date.year, self.current_date.month, 1)
@@ -218,27 +284,31 @@ class CalendarPage(QWidget):
         self.populateCalendar()
 
     def get_deadline_events(self):
-        """Collects all project and task deadlines mapped by date string (YYYY-MM-DD)"""
+        """Collects project and task deadline names mapped by date string (YYYY-MM-DD)."""
         events_map = {}
         projects = load_projects_from_json()
-        
+
         for proj in projects:
-            if getattr(proj, 'is_archived', False):
+            if getattr(proj, "is_archived", False):
                 continue
-            if hasattr(proj, 'deadline') and proj.deadline and proj.deadline != "No Deadline":
+            day_entry = events_map.setdefault
+            if hasattr(proj, "deadline") and proj.deadline and proj.deadline != "No Deadline":
                 d_str = str(proj.deadline)[:10]
-                events_map.setdefault(d_str, []).append(f"Project: {proj.name}")
-            
-            for task in getattr(proj, 'tasks', []):
-                t_deadline = getattr(task, 'deadline', "No Deadline")
+                entry = events_map.setdefault(d_str, {"tasks": [], "projects": []})
+                entry["projects"].append(proj.name)
+
+            for task in getattr(proj, "tasks", []):
+                t_deadline = getattr(task, "deadline", "No Deadline")
                 if t_deadline and t_deadline != "No Deadline":
                     t_str = str(t_deadline)[:10]
-                    t_name = task.name if hasattr(task, 'name') else task.get('name', '')
-                    events_map.setdefault(t_str, []).append(f"Task: {t_name} ({proj.name})")
-                    
+                    t_name = task.name if hasattr(task, "name") else task.get("name", "")
+                    entry = events_map.setdefault(t_str, {"tasks": [], "projects": []})
+                    entry["tasks"].append(f"{t_name} ({proj.name})" if proj.name else t_name)
+
         return events_map
 
     def populateCalendar(self):
+        self.hideDueTasksPopup()
         while self.calendarGrid.count():
             item = self.calendarGrid.takeAt(0)
             if item.widget():
@@ -251,7 +321,7 @@ class CalendarPage(QWidget):
         events_map = self.get_deadline_events()
 
         first_day_of_month = datetime.date(year, month, 1)
-        start_weekday = first_day_of_month.weekday() # 0 = Mon, 6 = Sun
+        start_weekday = first_day_of_month.weekday()  # 0 = Mon, 6 = Sun
         current_grid_date = first_day_of_month - datetime.timedelta(days=start_weekday)
 
         for col in range(7):
@@ -262,10 +332,20 @@ class CalendarPage(QWidget):
         for row in range(6):
             for col in range(7):
                 date_str = current_grid_date.isoformat()
-                day_events = events_map.get(date_str, [])
+                day_data = events_map.get(date_str, {})
+                task_events = day_data.get("tasks", [])
+                project_events = day_data.get("projects", [])
                 is_current_month = (current_grid_date.month == month)
 
-                cell = DayCellWidget(current_grid_date, is_current_month, day_events, parent=self.gridContainer, controller=self.controller)
+                cell = DayCellWidget(
+                    current_grid_date,
+                    is_current_month,
+                    task_events=task_events,
+                    project_events=project_events,
+                    parent=self.gridContainer,
+                    calendar_page=self,
+                    controller=self.controller,
+                )
                 self.calendarGrid.addWidget(cell, row, col)
 
                 current_grid_date += datetime.timedelta(days=1)

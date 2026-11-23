@@ -1298,6 +1298,15 @@ class ProjectDetailPage(QWidget):
         tasksHeaderRow.addStretch()
         pageLayout.addLayout(tasksHeaderRow)
 
+        # Project Tasks Label & Button
+        # TODO: if hints are off, do not create this label
+        tasksHint = QLabel("Click a Task / Subtask to mark it as done")
+        tasksHint.setObjectName("HINT_tasksHint")
+        tasksHint.setFont(QFont(self.activeFont, 12, QFont.Weight.Bold))
+        tasksHint.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
+        tasksHeaderRow.addStretch()
+        tasksHeaderRow.addWidget(tasksHint)
+
         # Task List Container with custom styling & custom scrollbar inside darkened box
         tasksContainerWidget = QWidget(self)
         tasksContainerWidget.setStyleSheet(
@@ -1536,7 +1545,7 @@ class ProjectDetailPage(QWidget):
                 break
         save_projects_to_json(all_projects)
         if self.controller and hasattr(self.controller, "showToast"):
-            self.controller.showToast(f"Archived '{proj_name}'", toast_type="info")
+            self.controller.showToast(f"Archived '{proj_name}'", toast_type="info", anchor_to_main=True)
         self.controller.returnToProjects()
 
     def deleteProjectPrompt(self):
@@ -1558,8 +1567,9 @@ class ProjectDetailPage(QWidget):
         all_projects = [p for p in all_projects if p.projectID != proj_id]
         save_projects_to_json(all_projects)
         if self.controller and hasattr(self.controller, "showToast"):
-            self.controller.showToast(f"Deleted '{proj_name}'", toast_type="error")
+            self.controller.showToast(f"Deleted '{proj_name}'", toast_type="error", anchor_to_main=True)
         self.controller.returnToProjects()
+        
 
 class ProjectListPage(QWidget):
     """Main Project Listing View"""
@@ -1687,11 +1697,18 @@ class ProjectListPage(QWidget):
             search_action = QAction(QIcon(tinted_pm), "", self.searchBar)
             self.searchBar.addAction(search_action, QLineEdit.ActionPosition.LeadingPosition)
 
+        # Sort Label
+        self.sortLabel = QLabel("SORT BY:")
+        self.sortLabel.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
+        self.sortLabel.setStyleSheet(
+            f"color: {self.theme.core_widgets_gentext}; border: none; outline: none;"
+        )
+
         # Sort Button
-        self.btnSort = HoverButton("SORT BY ▾", self, self.animator)
+        self.btnSort = HoverButton("DEFAULT", self, self.animator)
         self.btnSort.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btnSort.setFont(QFont(self.activeJetFamFont, 10, QFont.Weight.Bold))
-        self.btnSort.setFixedHeight(35); self.btnSort.setFixedWidth(150)
+        self.btnSort.setFixedHeight(35); self.btnSort.setFixedWidth(110)
         self.btnSort.setStyleSheet(
             f"color: {self.theme.core_widgets_btntext}; border: 2px solid {self.theme.core_pos_border}; outline: none; border-radius: 12px; text-align: center;"
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {self.theme.core_pos_bg.hex1}, stop:1 {self.theme.core_pos_bg.hex2});"
@@ -1714,7 +1731,8 @@ class ProjectListPage(QWidget):
 
         # Assemble Bottom Bar
         bottomBarLayout.addWidget(self.searchBar)
-        bottomBarLayout.addStretch()      
+        bottomBarLayout.addStretch()
+        bottomBarLayout.addWidget(self.sortLabel)
         bottomBarLayout.addWidget(self.btnSort)
         bottomBarLayout.addWidget(self.btnOrder)
 
@@ -1873,11 +1891,11 @@ class ProjectListPage(QWidget):
         selected_action = menu.exec(btn_pos)
 
         sort_map = {
-            action_name: ("name", "A-Z ▾"),
-            action_deadline: ("deadline", "DEADLINE ▾"),
-            action_progress: ("progress", "PROGRESS ▾"),
-            action_status: ("status", "STATUS ▾"),
-            action_total_tasks: ("total_tasks", "TASKS ▾"),
+            action_name: ("name", "A-Z"),
+            action_deadline: ("deadline", "DEADLINE"),
+            action_progress: ("progress", "PROGRESS"),
+            action_status: ("status", "STATUS"),
+            action_total_tasks: ("total_tasks", "TASKS"),
         }
 
         if selected_action in sort_map:

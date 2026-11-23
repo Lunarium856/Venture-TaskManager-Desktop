@@ -287,9 +287,9 @@ class MainController(QMainWindow):
     def returnToProjects(self):
         self.navigateTo(self.page_project_list)
 
-    def showToast(self, message: str, toast_type: str = "info", duration: int = 2500):
+    def showToast(self, message: str, toast_type: str = "info", duration: int = 2500, anchor_to_main: bool = False):
         """Displays a floating toast notification over the main content stack."""
-        container = self.stackedWidget if hasattr(self, "stackedWidget") and self.stackedWidget else self.masterWidget
+        container = self.masterWidget if hasattr(self, "masterWidget") and self.masterWidget else self.stackedWidget
         if hasattr(self, "_active_toast") and self._active_toast is not None:
             try:
                 self._active_toast.close()
@@ -301,6 +301,7 @@ class MainController(QMainWindow):
             duration=duration,
             parent=container,
             controller=self,
+            anchor_to_main=anchor_to_main,
         )
         self._active_toast.showToast()
 

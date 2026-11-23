@@ -28,3 +28,14 @@ class SettingsPage(QWidget):
         label.setStyleSheet("color: white; border: none; background: transparent;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         contentLayout.addWidget(label)
+
+
+# SETTINGS
+#   Hints (On / Off)
+#      def checkHint(widget):
+#          if "HINT_" in widget.objectName():
+#              # Do not add to content stack
+#   Animations (On / Off)]
+#   Animation Speed (Slider from 0.25s to 2s) (only available if Animations are on)
+#   JSON Save path
+#   Theme (Choose from Stock / Custom)

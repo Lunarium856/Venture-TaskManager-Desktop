@@ -1656,6 +1656,8 @@ class ProjectListPage(QWidget):
         
         self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
+        QScroller.grabGesture(self.scrollArea.viewport(), QScroller.ScrollerGestureType.LeftMouseButtonGesture) # doesnt work as intended yet
         
         v_bar = RoundedScrollBar(Qt.Orientation.Vertical, self.scrollArea, controller=self.controller)
         v_bar.setFixedWidth(16)

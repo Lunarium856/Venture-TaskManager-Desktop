@@ -1296,18 +1296,8 @@ class DueTasksPopup(QWidget):
         header.setStyleSheet(f"color: {self.theme.sidebar_activebtn}; background: transparent; border: none;")
         layout.addWidget(header)
 
-        if task_names:
-            tasks_hdr = QLabel("TASKS", self)
-            tasks_hdr.setFont(QFont(active_font, 8, QFont.Weight.Bold))
-            tasks_hdr.setStyleSheet(f"color: {self.theme.core_pos_bg.hex2}; background: transparent; border: none; margin-top: 2px;")
-            layout.addWidget(tasks_hdr)
-
-            for name in task_names:
-                item_lbl = QLabel(f"• {name}", self)
-                item_lbl.setFont(QFont(active_font, 10, QFont.Weight.Bold))
-                item_lbl.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
-                layout.addWidget(item_lbl)
-
+        maxStrLen = 25
+        # Projects List
         if project_names:
             projs_hdr = QLabel("PROJECTS", self)
             projs_hdr.setFont(QFont(active_font, 8, QFont.Weight.Bold))
@@ -1315,10 +1305,24 @@ class DueTasksPopup(QWidget):
             layout.addWidget(projs_hdr)
 
             for name in project_names:
-                item_lbl = QLabel(f"• {name}", self)
+                item_lbl = QLabel(f"• {name if len(name) < maxStrLen else name[:maxStrLen].rstrip() + "..."}", self)
                 item_lbl.setFont(QFont(active_font, 10, QFont.Weight.Bold))
                 item_lbl.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
                 layout.addWidget(item_lbl)
+
+        # Tasks List
+        if task_names:
+            tasks_hdr = QLabel("TASKS", self)
+            tasks_hdr.setFont(QFont(active_font, 8, QFont.Weight.Bold))
+            tasks_hdr.setStyleSheet(f"color: {self.theme.core_pos_bg.hex2}; background: transparent; border: none; margin-top: 2px;")
+            layout.addWidget(tasks_hdr)
+
+            for name in task_names:
+                item_lbl = QLabel(f"• {name if len(name) < maxStrLen else name[:maxStrLen].rstrip() + "..."}", self)
+                item_lbl.setFont(QFont(active_font, 10, QFont.Weight.Bold))
+                item_lbl.setStyleSheet(f"color: {self.theme.core_widgets_gentext}; background: transparent; border: none;")
+                layout.addWidget(item_lbl)
+
 
         self.effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.effect)

@@ -53,17 +53,6 @@ class DayCellWidget(QWidget):
             f"border-radius: 6px; padding: 2px 6px;"
         )
 
-        # Due Tasks badge
-        task_count = len(self.task_events)
-        if task_count > 0:
-            taskBadgeLbl = QLabel(f"{task_count} task{'s' if task_count != 1 else ''}", self)
-            taskBadgeLbl.setFont(QFont(self.activeFont, 9, QFont.Weight.Bold))
-            taskBadgeLbl.setStyleSheet(
-                badge_style_base
-                + f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0.2 {self.theme.core_pos_bg.hex1}, stop:0.9 {self.theme.core_pos_bg.hex2});"
-            )
-            layout.addWidget(taskBadgeLbl)
-
         # Due Projects badge
         proj_count = len(self.project_events)
         if proj_count > 0:
@@ -77,6 +66,17 @@ class DayCellWidget(QWidget):
 
         layout.addStretch()
 
+        # Due Tasks badge
+        task_count = len(self.task_events)
+        if task_count > 0:
+            taskBadgeLbl = QLabel(f"{task_count} task{'s' if task_count != 1 else ''}", self)
+            taskBadgeLbl.setFont(QFont(self.activeFont, 9, QFont.Weight.Bold))
+            taskBadgeLbl.setStyleSheet(
+                badge_style_base
+                + f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0.2 {self.theme.core_pos_bg.hex1}, stop:0.9 {self.theme.core_pos_bg.hex2});"
+            )
+            layout.addWidget(taskBadgeLbl)
+            
         # Cell styling
         bg_opacity = "0.35" if is_today else ("0.15" if self.is_current_month else "0.05")
         self.resting_border = self.theme.core_pos_bg.hex2 if is_today else self.theme.sidebar_neutralbtn_border
@@ -118,30 +118,33 @@ class DayCellWidget(QWidget):
         popup.popupAt(QPoint(top_left_in_parent.x(), candidate_y), bounds)
 
     def eventFilter(self, obj, event):
-        if obj is self:
-            if event.type() == QEvent.Type.Enter:
-                if self.controller and getattr(self.controller, "animator", None):
-                    self.controller.animator.animateOnHover(
-                        self,
-                        ["border"],
-                        [self.resting_border],
-                        [self.hover_border],
-                        duration=160,
-                    )
-                if self.task_events or self.project_events:
-                    self._openDueTasksPopup()
-            elif event.type() == QEvent.Type.Leave:
-                if self.controller and getattr(self.controller, "animator", None):
-                    self.controller.animator.animateOnHover(
-                        self,
-                        ["border"],
-                        [self.hover_border],
-                        [self.resting_border],
-                        duration=160,
-                    )
-                if self.calendar_page:
-                    self.calendar_page.hideDueTasksPopup()
-        return super().eventFilter(obj, event)
+        try:
+            if obj is self:
+                if event.type() == QEvent.Type.Enter:
+                    if self.controller and getattr(self.controller, "animator", None):
+                        self.controller.animator.animateOnHover(
+                            self,
+                            ["border"],
+                            [self.resting_border],
+                            [self.hover_border],
+                            duration=160,
+                        )
+                    if self.task_events or self.project_events:
+                        self._openDueTasksPopup()
+                elif event.type() == QEvent.Type.Leave:
+                    if self.controller and getattr(self.controller, "animator", None):
+                        self.controller.animator.animateOnHover(
+                            self,
+                            ["border"],
+                            [self.hover_border],
+                            [self.resting_border],
+                            duration=160,
+                        )
+                    if self.calendar_page:
+                        self.calendar_page.hideDueTasksPopup()
+            return super().eventFilter(obj, event)
+        except KeyboardInterrupt:
+            pass
 
 
 class CalendarPage(QWidget):
